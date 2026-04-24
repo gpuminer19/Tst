@@ -9,9 +9,9 @@ from flask_sqlalchemy import SQLAlchemy
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "0").split(",") if x]
-TON_WALLET = os.environ.get("TON_WALLET", "")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8663587522:AAEkCqnlOW3964GoFha7I8Smar9UFKbcBKA")
+ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "7136928282").split(",") if x]
+TON_WALLET = os.environ.get("TON_WALLET", "12882abd")
 
 app = Flask(__name__)
 
