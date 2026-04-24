@@ -155,6 +155,7 @@
 <div id="loading" class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Загрузка данных...</div>
 
 <script>
+
 const API_URL = "https://tst-6knx.onrender.com/api/tg";
 
 let tg = window.Telegram.WebApp;
@@ -165,14 +166,18 @@ let user = tg.initDataUnsafe?.user;
 let userId = user?.id || "test_" + Math.floor(Math.random() * 10000);
 
 let playerData = {
-  ton: 5.0, gpuTokens: 0, friends: 0, referrerId: null, invitedFriends: []
+  ton: 5.0,
+  gpuTokens: 0,
+  friends: 0,
+  referrerId: null,
+  invitedFriends: []
 };
 
 const gpuTemplates = [
-  { name: "GTX 1060", price: 1, tonReward: 1.2, gpuReward: 2,  durationMs: 60_000 },
-  { name: "RTX 2060", price: 2, tonReward: 2.4, gpuReward: 4,  durationMs: 120_000 },
-  { name: "RTX 3060", price: 3, tonReward: 3.6, gpuReward: 6,  durationMs: 180_000 },
-  { name: "EPIC GPU", price: 5, tonReward: 6,   gpuReward: 10, durationMs: 300_000 }
+  { name: "GTX 1060", price: 1, tonReward: 1.2, gpuReward: 2, durationMs: 60000 },
+  { name: "RTX 2060", price: 2, tonReward: 2.4, gpuReward: 4, durationMs: 120000 },
+  { name: "RTX 3060", price: 3, tonReward: 3.6, gpuReward: 6, durationMs: 180000 },
+  { name: "EPIC GPU", price: 5, tonReward: 6, gpuReward: 10, durationMs: 300000 }
 ];
 
 let gpuStates = [];
@@ -180,6 +185,7 @@ let refActive = false;
 let refEarnedTon = 0, refEarnedGpu = 0;
 let refTargetTon = 0, refTargetGpu = 0;
 let refInterval = null;
+let miningTimers = [];
 
 if (user) {
   document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
@@ -194,8 +200,13 @@ if (user) {
 
 function initGpuStates() {
   gpuStates = gpuTemplates.map(() => ({
-    active: false, totalTon: 0, totalGpu: 0,
-    earnedTon: 0, earnedGpu: 0, startedAt: 0, durationMs: 0
+    active: false,
+    totalTon: 0,
+    totalGpu: 0,
+    earnedTon: 0,
+    earnedGpu: 0,
+    startedAt: 0,
+    durationMs: 0
   }));
 }
 
@@ -257,14 +268,10 @@ async function syncWithBackend() {
           startedAt: Number(s.startedAt) || 0,
           durationMs: Number(s.durationMs) || 0
         }));
+      } else {
+        initGpuStates();
       }
-      if (saved.refState) {
-        refActive = false;
-        refTargetTon = Number(saved.refState.refTargetTon) || 0;
-        refTargetGpu = Number(saved.refState.refTargetGpu) || 0;
-        refEarnedTon = Number(saved.refState.refEarnedTon) || 0;
-        refEarnedGpu = Number(saved.refState.refEarnedGpu) || 0;
-      }
+      
       updateUI();
       restoreCardsUI();
       await loadReferrals();
@@ -276,6 +283,9 @@ async function syncWithBackend() {
 }
 
 function restoreCardsUI() {
+  miningTimers.forEach(timer => clearTimeout(timer));
+  miningTimers = [];
+  
   gpuStates.forEach((s, idx) => {
     if (s.active && s.startedAt && s.durationMs) {
       const elapsed = Date.now() - s.startedAt;
@@ -319,10 +329,12 @@ function startMiningTimer(idx) {
       renderCard(idx, 'claim');
       saveToBackend();
     } else {
-      setTimeout(tick, 500);
+      const timer = setTimeout(tick, 500);
+      miningTimers.push(timer);
     }
   };
-  tick();
+  const timer = setTimeout(tick, 500);
+  miningTimers.push(timer);
 }
 
 function buildStatePayload() {
@@ -370,7 +382,7 @@ async function saveToBackend(tonEarned = 0) {
   } catch(e) { console.log("Ошибка сохранения"); }
 }
 
-// ============ ПОПОЛНЕНИЕ КОШЕЛЬКА ============
+// ============ ПОПОЛНЕНИЕ ============
 async function createDeposit() {
   const input = document.getElementById('depositAmount');
   const amount = Number(input.value);
@@ -426,16 +438,19 @@ function showPayInfo(d) {
     </div>`;
   document.getElementById('payResult').innerHTML = html;
 }
+
 function copyText(text) {
   navigator.clipboard.writeText(text);
   tg.showAlert("📋 Скопировано");
 }
-// ============ РЕФЕРАЛЬНАЯ КАРТА ============
+
+// ============ РЕФЕРАЛЫ ============
 function getRefRewards() {
   if (playerData.friends >= 50) return { ton: 10, gpu: 50 };
   if (playerData.friends >= 5) return { ton: 1, gpu: 5 };
   return { ton: 0, gpu: 0 };
 }
+
 function updateRefUI() {
   const container = document.getElementById("refStatus");
   if (!container) return;
@@ -458,6 +473,7 @@ function updateRefUI() {
   }
   if (refActive && refEarnedTon >= refTargetTon - 0.01) finishRefMining();
 }
+
 function finishRefMining() {
   if (refInterval) clearInterval(refInterval);
   refActive = false;
@@ -473,6 +489,7 @@ function finishRefMining() {
     updateRefUI();
   };
 }
+
 function startRefMining() {
   const rewards = getRefRewards();
   if (rewards.ton === 0 || refActive) return;
@@ -484,6 +501,7 @@ function startRefMining() {
   const incTon = refTargetTon / steps;
   const incGpu = refTargetGpu / steps;
   updateRefUI();
+  if (refInterval) clearInterval(refInterval);
   refInterval = setInterval(() => {
     if (!refActive) { clearInterval(refInterval); return; }
     step++;
@@ -496,6 +514,7 @@ function startRefMining() {
     if (step >= steps) { clearInterval(refInterval); finishRefMining(); }
   }, 700);
 }
+
 function renderCard(idx, state) {
   const card = document.getElementById(`card_${idx}`);
   if (!card) return;
@@ -506,7 +525,8 @@ function renderCard(idx, state) {
       <h3>${g.name} <span class="badge">+20%</span></h3>
       <div class="rewards-info"><span>+${g.tonReward} TON</span><span>+${g.gpuReward} GPU</span></div>
       <button class="buy-btn">Купить ${g.price} TON</button></div>`;
-    card.querySelector('.buy-btn').onclick = () => buyGPU(idx);
+    const buyBtn = card.querySelector('.buy-btn');
+    if (buyBtn) buyBtn.onclick = () => buyGPU(idx);
   } else if (state === 'farm') {
     card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info">
       <h3>${g.name} ⚡</h3>
@@ -516,9 +536,11 @@ function renderCard(idx, state) {
     card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info">
       <h3>${g.name}</h3>
       <button class="claim-btn claim-gpu">🎁 Забрать ${s.totalTon} TON + ${s.totalGpu} GPU</button></div>`;
-    card.querySelector('.claim-gpu').onclick = () => claimGPU(idx);
+    const claimBtn = card.querySelector('.claim-gpu');
+    if (claimBtn) claimBtn.onclick = () => claimGPU(idx);
   }
 }
+
 function buyGPU(idx) {
   const g = gpuTemplates[idx];
   const s = gpuStates[idx];
@@ -537,6 +559,7 @@ function buyGPU(idx) {
   renderCard(idx, 'farm');
   startMiningTimer(idx);
 }
+
 function claimGPU(idx) {
   const s = gpuStates[idx];
   if (s.earnedTon < s.totalTon - 0.01) return;
@@ -546,11 +569,14 @@ function claimGPU(idx) {
   s.totalTon = 0; s.totalGpu = 0;
   s.earnedTon = 0; s.earnedGpu = 0;
   s.startedAt = 0; s.durationMs = 0;
+  s.active = false;
   updateUI();
   renderCard(idx, 'buy');
 }
+
 function initGrid() {
   const grid = document.getElementById("grid");
+  if (!grid) return;
   grid.innerHTML = "";
   gpuTemplates.forEach((_, i) => {
     const card = document.createElement("div");
@@ -560,29 +586,42 @@ function initGrid() {
     renderCard(i, 'buy');
   });
 }
+
 window.openTab = function(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
+  const tab = document.getElementById(id);
+  if (tab) tab.classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   if (id === "referral") { updateRefUI(); renderFriendsList(); }
 };
+
 async function init() {
   initGpuStates();
   initGrid();
   await syncWithBackend();
   updateRefUI();
-  document.getElementById("loading").style.display = "none";
-  document.getElementById("app").style.display = "block";
+  const loading = document.getElementById("loading");
+  const appDiv = document.getElementById("app");
+  if (loading) loading.style.display = "none";
+  if (appDiv) appDiv.style.display = "block";
 }
-document.getElementById("copyRefBtn").onclick = () => {
-  const link = document.getElementById("refLink").innerText;
-  navigator.clipboard.writeText(link);
-  tg.showAlert("📋 Реферальная ссылка скопирована!");
-};
+
+const copyRefBtn = document.getElementById("copyRefBtn");
+if (copyRefBtn) {
+  copyRefBtn.onclick = () => {
+    const link = document.getElementById("refLink");
+    if (link) {
+      navigator.clipboard.writeText(link.innerText);
+      tg.showAlert("📋 Реферальная ссылка скопирована!");
+    }
+  };
+}
+
 init();
 tg.MainButton.hide();
 tg.BackButton.hide();
+ 
 </script>
 </body>
 </html>
