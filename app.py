@@ -1,8 +1,6 @@
 import os
 import sqlite3
 import json
-import threading
-import time
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -14,9 +12,18 @@ ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "7136928282").split(","
 TON_WALLET = os.environ.get("TON_WALLET", "qwww")
 
 app = Flask(__name__)
-CORS(app)
 
-# Запускаем бота в отдельном потоке
+# РАЗРЕШАЕМ ВСЕ ЗАПРОСЫ СО ВСЕХ ДОМЕНОВ
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА ОТ CORS — РУЧНЫЕ ЗАГОЛОВКИ
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
+
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # === БАЗА ДАННЫХ ===
@@ -36,57 +43,6 @@ def init_db():
     conn.close()
 
 init_db()
-
-# === ОБРАБОТЧИКИ БОТА ===
-@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_"))
-def approve_deposit(call):
-    print(f"Получен callback: {call.data} от {call.from_user.id}")
-    
-    if call.from_user.id not in ADMIN_IDS:
-        bot.answer_callback_query(call.id, "⛔ Доступ запрещён")
-        return
-    
-    deposit_id = int(call.data.split("_")[1])
-    conn = sqlite3.connect('game.db')
-    c = conn.cursor()
-    c.execute("SELECT user_id, amount FROM deposits WHERE id = ? AND status = 'pending'", (deposit_id,))
-    row = c.fetchone()
-    
-    if row:
-        user_id, amount = row
-        c.execute("UPDATE deposits SET status = 'approved' WHERE id = ?", (deposit_id,))
-        c.execute("UPDATE users SET ton = ton + ? WHERE user_id = ?", (amount, user_id))
-        conn.commit()
-        
-        # Уведомляем пользователя
-        try:
-            bot.send_message(int(user_id), f"✅ Ваш баланс пополнен на {amount} TON!")
-        except:
-            pass
-        
-        bot.answer_callback_query(call.id, "✅ Подтверждено")
-        bot.edit_message_text(f"✅ Заявка #{deposit_id} подтверждена", call.message.chat.id, call.message.message_id)
-        print(f"Заявка {deposit_id} подтверждена, начислено {amount} TON пользователю {user_id}")
-    else:
-        bot.answer_callback_query(call.id, "❌ Заявка не найдена")
-    
-    conn.close()
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("reject_"))
-def reject_deposit(call):
-    if call.from_user.id not in ADMIN_IDS:
-        bot.answer_callback_query(call.id, "⛔ Доступ запрещён")
-        return
-    
-    deposit_id = int(call.data.split("_")[1])
-    conn = sqlite3.connect('game.db')
-    c = conn.cursor()
-    c.execute("UPDATE deposits SET status = 'rejected' WHERE id = ?", (deposit_id,))
-    conn.commit()
-    conn.close()
-    
-    bot.answer_callback_query(call.id, "❌ Отклонено")
-    bot.edit_message_text(f"❌ Заявка #{deposit_id} отклонена", call.message.chat.id, call.message.message_id)
 
 # === API ДЛЯ ФРОНТЕНДА ===
 @app.route('/api/tg', methods=['POST', 'OPTIONS'])
@@ -115,7 +71,8 @@ def api_handler():
         c.execute("SELECT ton, gpu, friends_count, mining_state FROM users WHERE user_id = ?", (user_id,))
         row = c.fetchone()
         conn.close()
-        return jsonify({"success": True, "data": {"ton": row[0], "gpu": row[1], "friends": row[2], "state": json.loads(row[3]) if row[3] else {}}})
+        print(f"Register OK for {user_id}")
+        return jsonify({"success": True, "data": {"ton": row[0], "gpu": row[1], "friends": row[2], "state": json.loads(row[3])}})
 
     if action == 'save':
         ton = data.get('ton')
@@ -124,6 +81,7 @@ def api_handler():
         c.execute("UPDATE users SET ton = ?, gpu = ?, mining_state = ? WHERE user_id = ?", (ton, gpu, state, user_id))
         conn.commit()
         conn.close()
+        print(f"Save OK for {user_id}")
         return jsonify({"success": True})
 
     if action == 'getReferrals':
@@ -149,34 +107,78 @@ def api_handler():
             )
             for admin_id in ADMIN_IDS:
                 try:
-                    bot.send_message(admin_id, f"🔔 Новая заявка!\n👤 {user_id}\n💰 {amount} TON\n📝 {comment}", reply_markup=markup)
+                    bot.send_message(admin_id, f"🔔 Заявка!\n👤 {user_id}\n💰 {amount} TON\n📝 {comment}", reply_markup=markup)
                 except Exception as e:
-                    print(f"Ошибка отправки админу {admin_id}: {e}")
+                    print(f"Ошибка отправки админу: {e}")
         
         return jsonify({"success": True, "deposit": {"wallet": TON_WALLET, "comment": comment, "amount": amount}})
 
     conn.close()
     return jsonify({"success": False, "error": "Unknown action"})
 
+# === ОБРАБОТЧИКИ БОТА ===
+@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_"))
+def approve_deposit(call):
+    if call.from_user.id not in ADMIN_IDS:
+        bot.answer_callback_query(call.id, "Доступ запрещён")
+        return
+    
+    deposit_id = int(call.data.split("_")[1])
+    conn = sqlite3.connect('game.db')
+    c = conn.cursor()
+    c.execute("SELECT user_id, amount FROM deposits WHERE id = ? AND status = 'pending'", (deposit_id,))
+    row = c.fetchone()
+    
+    if row:
+        user_id, amount = row
+        c.execute("UPDATE deposits SET status = 'approved' WHERE id = ?", (deposit_id,))
+        c.execute("UPDATE users SET ton = ton + ? WHERE user_id = ?", (amount, user_id))
+        conn.commit()
+        try:
+            bot.send_message(int(user_id), f"✅ Баланс пополнен на {amount} TON!")
+        except:
+            pass
+        bot.answer_callback_query(call.id, "Подтверждено")
+        bot.edit_message_text(f"✅ Заявка #{deposit_id} подтверждена", call.message.chat.id, call.message.message_id)
+    conn.close()
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("reject_"))
+def reject_deposit(call):
+    if call.from_user.id not in ADMIN_IDS:
+        bot.answer_callback_query(call.id, "Доступ запрещён")
+        return
+    
+    deposit_id = int(call.data.split("_")[1])
+    conn = sqlite3.connect('game.db')
+    c = conn.cursor()
+    c.execute("UPDATE deposits SET status = 'rejected' WHERE id = ?", (deposit_id,))
+    conn.commit()
+    conn.close()
+    bot.answer_callback_query(call.id, "Отклонено")
+    bot.edit_message_text(f"❌ Заявка #{deposit_id} отклонена", call.message.chat.id, call.message.message_id)
+
 @app.route('/')
 def home():
     return "OK"
 
-# === ЗАПУСК БОТА В ОТДЕЛЬНОМ ПОТОКЕ ===
+# === ЗАПУСК БОТА В ПОТОКЕ ===
+import threading
+import time
+
 def run_bot():
-    print("Бот запускается...")
-    try:
-        bot.infinity_polling(timeout=10, long_polling_timeout=5)
-    except Exception as e:
-        print(f"Ошибка бота: {e}")
-        time.sleep(5)
-        run_bot()
+    while True:
+        try:
+            print("Бот запущен и слушает...")
+            bot.infinity_polling(timeout=10, long_polling_timeout=5)
+        except Exception as e:
+            print(f"Ошибка бота: {e}")
+            time.sleep(5)
 
 if __name__ == '__main__':
-    # Запускаем бота в фоновом потоке
+    # Запускаем бота в фоне
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
-    # Запускаем Flask сервер
+    # Запускаем Flask
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
