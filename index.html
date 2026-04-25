@@ -84,7 +84,6 @@
   
   .referral-cards-grid { display: flex; flex-direction: column; gap: 12px; margin: 16px; }
   .locked-card { opacity: 0.6; filter: grayscale(0.3); }
-  .diagnostic-btn { background: #FF8C00; margin-top: 10px; padding: 8px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -116,7 +115,6 @@
       </div>
     </div>
   </div>
-  <button class="diagnostic-btn" onclick="diagnostic()">🔧 Диагностика</button>
 </div>
 
 <div id="home" class="tab active">
@@ -311,40 +309,19 @@ function updateRefLink() {
   document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
 }
 
-// ========== ДИАГНОСТИЧЕСКАЯ КНОПКА ==========
-async function diagnostic() {
-  tg.showAlert("🔍 Проверка...");
-  
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'register', user_id: userId.toString(), name: user?.first_name || 'Test' })
-  });
-  const data = await response.json();
-  
-  if (data.success) {
-    tg.showAlert(
-      `📊 ДАННЫЕ С СЕРВЕРА:\n` +
-      `💰 TON: ${data.data.ton}\n` +
-      `⚡ GPU: ${data.data.gpu}\n` +
-      `👥 Друзей: ${data.data.friends}\n` +
-      `\n📱 В игре:\n` +
-      `💰 TON: ${playerData.ton}\n` +
-      `⚡ GPU: ${playerData.gpuTokens}`
-    );
-    
-    if (data.data.ton !== playerData.ton) {
-      const fix = confirm("Баланс не совпадает! Обновить игру?");
-      if (fix) {
-        playerData.ton = data.data.ton;
-        playerData.gpuTokens = data.data.gpu;
-        updateUI();
-        tg.showAlert("✅ Баланс исправлен!");
-      }
+// ========== ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ БАЛАНСА ==========
+async function syncBalance() {
+  const result = await apiRequest("register", {});
+  if (result && result.success) {
+    if (playerData.ton !== result.data.ton) {
+      console.log(`🔄 Баланс синхронизирован: ${playerData.ton} → ${result.data.ton}`);
+      playerData.ton = result.data.ton;
+      playerData.gpuTokens = result.data.gpu;
+      updateUI();
     }
-  } else {
-    tg.showAlert("❌ Ошибка получения данных");
+    return result.data.ton;
   }
+  return playerData.ton;
 }
 
 // ========== АКТИВАЦИЯ РЕФЕРАЛЬНЫХ КАРТ ==========
@@ -417,6 +394,9 @@ async function handleClaimReward(e) {
 }
 
 async function claimReferralReward(cardIndex) {
+  // СИНХРОНИЗИРУЕМ БАЛАНС ПЕРЕД ПОЛУЧЕНИЕМ НАГРАДЫ
+  await syncBalance();
+  
   const card = gpuTemplates[cardIndex];
   const state = gpuStates[cardIndex];
   if (!state || state.earnedTon < state.totalTon - 0.01) {
@@ -467,21 +447,6 @@ async function apiRequest(action, additionalData = {}) {
     }
     return result;
   } catch (error) { console.error(error); tg.showAlert("❌ Ошибка связи"); return null; }
-}
-
-// ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ БАЛАНСА - РЕШАЕТ ПРОБЛЕМУ!
-async function syncBalance() {
-  const result = await apiRequest("register", {});
-  if (result && result.success) {
-    if (playerData.ton !== result.data.ton) {
-      console.log(`🔄 Баланс синхронизирован: ${playerData.ton} → ${result.data.ton}`);
-      playerData.ton = result.data.ton;
-      playerData.gpuTokens = result.data.gpu;
-      updateUI();
-    }
-    return result.data.ton;
-  }
-  return playerData.ton;
 }
 
 async function loadUserData(referrerId = null) {
@@ -542,7 +507,6 @@ function initGpuStates() {
 }
 
 async function buyGPU(idx) {
-  // ✅ СИНХРОНИЗИРУЕМ БАЛАНС ПЕРЕД ПОКУПКОЙ - ЭТО РЕШАЕТ ПРОБЛЕМУ!
   await syncBalance();
   
   const gpu = gpuTemplates[idx];
@@ -575,8 +539,14 @@ async function buyGPU(idx) {
 }
 
 async function claimGPU(idx) {
+  // СИНХРОНИЗИРУЕМ БАЛАНС ПЕРЕД ПОЛУЧЕНИЕМ НАГРАДЫ
+  await syncBalance();
+  
   const state = gpuStates[idx];
-  if (state.earnedTon < state.totalTon - 0.01) { tg.showAlert("⏳ Майнинг ещё не завершён"); return; }
+  if (state.earnedTon < state.totalTon - 0.01) {
+    tg.showAlert("⏳ Майнинг ещё не завершён");
+    return;
+  }
   
   if (miningIntervals[idx]) {
     clearInterval(miningIntervals[idx]);
@@ -690,29 +660,21 @@ function showPayInfo(deposit) {
 
 function copyText(text) { navigator.clipboard.writeText(text); tg.showAlert("📋 Скопировано"); }
 
-// ========== ОБНОВЛЕННАЯ ФУНКЦИЯ OPEN TAB ==========
-window.openTab = async function(id, btn) {
+// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК (БЕЗ АВТООБНОВЛЕНИЯ БАЛАНСА) ==========
+window.openTab = function(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   
-  if (id === "home") {
-    await loadUserData();
-    renderAllCards();
-    updateUI();
-  }
+  // Только обновляем специфические данные для вкладок
   if (id === "referral") {
-    await loadReferrals();
+    loadReferrals();
     updateRefLink();
-    await loadUserData();
   }
   if (id === "wallet") {
-    await loadUserData();
     renderHistory();
   }
-  
-  console.log(`🔄 Данные обновлены при переходе на вкладку: ${id}`);
 };
 
 function keepAlive() { setInterval(async () => { try { await fetch(API_URL, { method: 'HEAD' }); } catch(e) {} }, 4 * 60 * 1000); }
@@ -744,7 +706,6 @@ async function init() {
   updateRefLink();
   await loadReferrals();
   keepAlive();
-  setInterval(async () => { await loadUserData(); }, 120000);
   document.getElementById("loading").style.display = "none";
   document.getElementById("app").style.display = "block";
   tg.MainButton.hide(); tg.BackButton.hide();
