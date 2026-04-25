@@ -86,7 +86,7 @@ async function requireAuth(req, res, next) {
 
 // ========== API для игры ==========
 app.post('/api/tg', async (req, res) => {
-  const { action, user_id, name, referrer_id, amount, ton, gpu, friends, ton_earned, state } = req.body;
+  const { action, user_id, name, referrer_id, amount, ton, gpu, friends, ton_earned, state, tonWallet } = req.body;
   
   try {
     // Проверка бана
@@ -177,6 +177,37 @@ app.post('/api/tg', async (req, res) => {
       return res.json({
         success: true,
         deposit: { amount: amount, wallet: process.env.TON_WALLET, comment: comment }
+      });
+    }
+    
+    // ========== 5. СОЗДАНИЕ ЗАЯВКИ НА ВЫВОД (ДОБАВЛЕНО) ==========
+    if (action === 'createWithdraw') {
+      const { amount, tonWallet } = req.body;
+      
+      if (!amount || amount <= 0 || !tonWallet) {
+        return res.status(400).json({ success: false, error: 'Invalid withdraw data' });
+      }
+      
+      const user = await User.findOne({ userId: user_id });
+      if (!user || user.ton < amount) {
+        return res.status(400).json({ success: false, error: 'Insufficient balance' });
+      }
+      
+      const comment = `WITHDRAW_${user_id}_${Date.now()}`;
+      const withdrawRequest = new Deposit({
+        userId: user_id,
+        userName: name,
+        amount: amount,
+        wallet: tonWallet,
+        comment: comment,
+        type: 'withdraw',
+        status: 'pending'
+      });
+      await withdrawRequest.save();
+      
+      return res.json({
+        success: true,
+        message: 'Withdraw request created, waiting for admin approval'
       });
     }
     
