@@ -663,7 +663,7 @@ async function init() {
   updateRefLink();
   await loadReferrals();
   keepAlive();
-  setInterval(async () => { await loadUserData(); }, 30000);
+  setInterval(async () => { await loadUserData(); }, 60000);
   document.getElementById("loading").style.display = "none";
   document.getElementById("app").style.display = "block";
   tg.MainButton.hide(); tg.BackButton.hide();
