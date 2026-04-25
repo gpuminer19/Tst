@@ -3,6 +3,7 @@ import json
 import secrets
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from datetime import datetime
 import sqlite3
 from contextlib import contextmanager
@@ -68,7 +69,7 @@ def init_db():
 
 init_db()
 
-# --- Эндпоинты ---
+# --- Эндпоинты игры ---
 @app.post("/api/tg")
 async def telegram_api(request: Request):
     try:
@@ -211,38 +212,30 @@ async def root():
 async def health():
     return {"status": "alive"}
 
+# ========== АДМИН-ПАНЕЛЬ ==========
 
-# --- АДМИН-ПАНЕЛЬ (добавить после всех существующих эндпоинтов) ---
-
-# Простая аутентификация (смените пароль на свой!)
-ADMIN_PASSWORD = "admin123"  # ⚠️ ОБЯЗАТЕЛЬНО СМЕНИТЕ!
+ADMIN_PASSWORD = "admin123"  # ⚠️ СМЕНИТЕ НА СВОЙ ПАРОЛЬ!
 
 @app.get("/admin")
 async def admin_panel(request: Request):
-    """Главная страница админки"""
-    # Получаем пароль из URL (?pass=admin123)
     password = request.query_params.get("pass")
     
     if password != ADMIN_PASSWORD:
         return {"error": "Unauthorized. Use ?pass=admin123", "hint": "Change password in code!"}
     
     with get_db() as conn:
-        # Статистика
         total_players = conn.execute("SELECT COUNT(*) as count FROM players").fetchone()["count"]
         total_deposits_pending = conn.execute("SELECT COUNT(*) as count FROM deposits WHERE status = 'pending'").fetchone()["count"]
         total_ton = conn.execute("SELECT SUM(ton) as sum FROM players").fetchone()["sum"] or 0
         
-        # Последние депозиты
         pending_deposits = conn.execute(
             "SELECT id, user_id, amount, comment, created_at FROM deposits WHERE status = 'pending' ORDER BY created_at DESC LIMIT 20"
         ).fetchall()
         
-        # Топ игроков по TON
         top_players = conn.execute(
             "SELECT user_id, name, ton, gpu, friends FROM players ORDER BY ton DESC LIMIT 10"
         ).fetchall()
     
-    # Генерируем HTML
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -269,6 +262,7 @@ async def admin_panel(request: Request):
             .nav-tab {{ padding: 8px 16px; cursor: pointer; border-radius: 8px; }}
             .nav-tab.active {{ background: #00D4FF; color: #0B0E1A; }}
             .hidden {{ display: none; }}
+            button {{ cursor: pointer; }}
         </style>
     </head>
     <body>
@@ -298,7 +292,7 @@ async def admin_panel(request: Request):
     for d in pending_deposits:
         html += f"""
         <tr>
-            <td>{d['id']}</td>
+            <td><code>{d['id']}</code></td>
             <td>{d['user_id']}</td>
             <td>{d['amount']}</td>
             <td><code>{d['comment']}</code></td>
@@ -342,7 +336,7 @@ async def admin_panel(request: Request):
                 <h3>🔍 Поиск игрока</h3>
                 <div class="search-box">
                     <input type="text" id="searchUserId" placeholder="Введите User ID">
-                    <button onclick="searchPlayer()" style="background:#00D4FF; border:none; padding:10px 20px; border-radius:8px; margin-left:10px; cursor:pointer;">Найти</button>
+                    <button onclick="searchPlayer()" style="background:#00D4FF; border:none; padding:10px 20px; border-radius:8px; margin-left:10px;">Найти</button>
                 </div>
                 <div id="searchResult"></div>
             </div>
@@ -389,11 +383,11 @@ async def admin_panel(request: Request):
                             <p><strong>💎 TON:</strong> ${data.player.ton}</p>
                             <p><strong>⚡ GPU:</strong> ${data.player.gpu}</p>
                             <p><strong>👥 Друзей:</strong> ${data.player.friends}</p>
-                            <button onclick="giveBonus('${userId}')" style="background:#FFB347; border:none; padding:8px 16px; border-radius:8px; cursor:pointer;">🎁 Начислить бонус 10 TON</button>
+                            <button onclick="giveBonus('${userId}')" style="background:#FFB347; border:none; padding:8px 16px; border-radius:8px;">🎁 Начислить бонус 10 TON</button>
                         </div>
                     `;
                 } else {
-                    document.getElementById('searchResult').innerHTML = `<p>❌ Игрок не найден</p>`;
+                    document.getElementById('searchResult').innerHTML = '<p>❌ Игрок не найден</p>';
                 }
             }
             
@@ -418,14 +412,11 @@ async def approve_deposit(deposit_id: str, user_id: str, amount: float, passw: s
         return {"success": False, "error": "Unauthorized"}
     
     with get_db() as conn:
-        # Проверяем, не подтверждена ли уже
         deposit = conn.execute("SELECT status FROM deposits WHERE id = ?", (deposit_id,)).fetchone()
         if not deposit or deposit["status"] != "pending":
             return {"success": False, "error": "Deposit not found or already processed"}
         
-        # Начисляем TON игроку
         conn.execute("UPDATE players SET ton = ton + ? WHERE user_id = ?", (amount, user_id))
-        # Обновляем статус заявки
         conn.execute("UPDATE deposits SET status = 'approved' WHERE id = ?", (deposit_id,))
     
     return {"success": True}
@@ -464,3 +455,8 @@ async def give_bonus(user_id: str, amount: float, passw: str = ""):
         conn.execute("UPDATE players SET ton = ton + ? WHERE user_id = ?", (amount, user_id))
     
     return {"success": True}
+
+# ========== ЗАПУСК ==========
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)
