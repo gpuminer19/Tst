@@ -214,7 +214,7 @@
 
 <script>
 
-// ========== НАСТРОЙКИ (ОБНОВЛЕНЫ) ==========
+// ========== НАСТРОЙКИ ==========
 const API_URL = "https://tst-production-b90a.up.railway.app/api/tg";
 const GAME_URL = "https://gpuminer19.github.io/Tst";
 const BOT_USERNAME = "Testgpuuubot";
@@ -315,19 +315,16 @@ async function refreshBalanceForAnyAction() {
     if (result && result.success) {
         const hasChanged = playerData.ton !== result.data.ton;
         
-        // Обновляем глобальные данные
         playerData.ton = result.data.ton;
         playerData.gpuTokens = result.data.gpu;
         playerData.friends = result.data.friends;
         if (result.data.invitedFriends) playerData.invitedFriends = result.data.invitedFriends;
         if (result.data.transactions) playerData.transactions = result.data.transactions;
         
-        // Всегда обновляем UI
         updateUI();
         renderFriendsList();
         renderHistory();
         
-        // Если изменились друзья, проверяем реферальные карты
         if (hasChanged || result.data.friends !== playerData.friends) {
             await checkAndActivateReferralCards();
         }
@@ -336,7 +333,6 @@ async function refreshBalanceForAnyAction() {
     }
 }
 
-// ========== ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ БАЛАНСА ДЛЯ ОТДЕЛЬНЫХ ДЕЙСТВИЙ ==========
 async function syncBalance() {
   const result = await apiRequest("register", {});
   if (result && result.success) {
@@ -475,15 +471,31 @@ async function apiRequest(action, additionalData = {}) {
   } catch (error) { console.error(error); tg.showAlert("❌ Ошибка связи"); return null; }
 }
 
+// ========== ИСПРАВЛЕННАЯ ФУНКЦИЯ ЗАГРУЗКИ ДАННЫХ (ВОССТАНАВЛИВАЕТ КАРТЫ) ==========
 async function loadUserData(referrerId = null) {
   const result = await apiRequest("register", { referrer_id: referrerId });
   if (result?.success && result.data) {
-    playerData = { ton: result.data.ton, gpuTokens: result.data.gpu, friends: result.data.friends, invitedFriends: result.data.invitedFriends || [], transactions: result.data.transactions || [] };
-    gpuStates = result.data.state?.gpuStates || gpuTemplates.map(() => ({ active: false, totalTon: 0, totalGpu: 0, earnedTon: 0, earnedGpu: 0, startedAt: 0, durationMs: 0 }));
+    playerData = { 
+      ton: result.data.ton, 
+      gpuTokens: result.data.gpu, 
+      friends: result.data.friends, 
+      invitedFriends: result.data.invitedFriends || [], 
+      transactions: result.data.transactions || [] 
+    };
+    
+    // ========== ВОССТАНАВЛИВАЕМ СОСТОЯНИЕ КАРТ С СЕРВЕРА ==========
+    if (result.data.state && result.data.state.gpuStates) {
+      gpuStates = result.data.state.gpuStates;
+      console.log("🔄 Состояние карт восстановлено с сервера");
+    } else {
+      initGpuStates();
+    }
+    
     updateUI();
     renderFriendsList();
     renderHistory();
-    startAllMinings();
+    renderAllCards();    // Перерисовываем карты
+    startAllMinings();   // Запускаем майнинг активных карт
     await checkAndActivateReferralCards();
     return true;
   }
@@ -693,18 +705,15 @@ function showPayInfo(deposit) {
 
 function copyText(text) { navigator.clipboard.writeText(text); tg.showAlert("📋 Скопировано"); }
 
-// ========== ОБНОВЛЕННАЯ ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ВКЛАДОК ==========
+// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК С ОБНОВЛЕНИЕМ БАЛАНСА ==========
 window.openTab = async function(id, btn) {
-    // Сначала обновляем баланс, чтобы пользователь видел актуальные данные
     await refreshBalanceForAnyAction();
     
-    // Старый код переключения вкладок
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.getElementById(id).classList.add("active");
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     
-    // Специфичные обновления для вкладок (теперь они не загружают баланс повторно)
     if (id === "referral") {
         await loadReferrals();
         updateRefLink();
