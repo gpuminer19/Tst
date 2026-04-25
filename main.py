@@ -22,6 +22,9 @@ app.add_middleware(
 # --- База данных ---
 DATABASE = "game.db"
 
+# Пароль админки из переменных окружения Render (БЕЗОПАСНО!)
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change_me_immediately")
+
 @contextmanager
 def get_db():
     conn = sqlite3.connect(DATABASE)
@@ -212,16 +215,14 @@ async def root():
 async def health():
     return {"status": "alive"}
 
-# ========== АДМИН-ПАНЕЛЬ ==========
-
-ADMIN_PASSWORD = "admin123"  # ⚠️ СМЕНИТЕ НА СВОЙ ПАРОЛЬ!
+# ========== АДМИН-ПАНЕЛЬ (ПАРОЛЬ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ) ==========
 
 @app.get("/admin")
 async def admin_panel(request: Request):
     password = request.query_params.get("pass")
     
     if password != ADMIN_PASSWORD:
-        return {"error": "Unauthorized. Use ?pass=admin123", "hint": "Change password in code!"}
+        return {"error": "Unauthorized", "hint": "Use ?pass=ваш_пароль"}
     
     with get_db() as conn:
         total_players = conn.execute("SELECT COUNT(*) as count FROM players").fetchone()["count"]
@@ -318,13 +319,13 @@ async def admin_panel(request: Request):
     
     for p in top_players:
         html += f"""
-        <tr>
-            <td>{p['user_id']}</td>
-            <td>{p['name']}</td>
-            <td>{p['ton']:.2f}</td>
-            <td>{p['gpu']}</td>
-            <td>{p['friends']}</td>
-        </tr>
+            <tr>
+                <td>{p['user_id']}</td>
+                <td>{p['name']}</td>
+                <td>{p['ton']:.2f}</td>
+                <td>{p['gpu']}</td>
+                <td>{p['friends']}</td>
+            </tr>
         """
     
     html += """
@@ -355,24 +356,30 @@ async def admin_panel(request: Request):
             
             async function approveDeposit(depositId, amount, userId) {
                 if(!confirm(`Подтвердить пополнение ${amount} TON для пользователя ${userId}?`)) return;
-                const resp = await fetch(`/admin/approve_deposit?pass=admin123&deposit_id=${depositId}&user_id=${userId}&amount=${amount}`);
+                const password = prompt('Введите пароль администратора');
+                if(!password) return;
+                const resp = await fetch(`/admin/approve_deposit?pass=${password}&deposit_id=${depositId}&user_id=${userId}&amount=${amount}`);
                 const data = await resp.json();
                 if(data.success) { alert('✅ Баланс пополнен!'); location.reload(); }
-                else { alert('❌ Ошибка: ' + data.error); }
+                else { alert('❌ Ошибка: ' + (data.error || 'Неверный пароль')); }
             }
             
             async function rejectDeposit(depositId) {
                 if(!confirm('Отклонить заявку?')) return;
-                const resp = await fetch(`/admin/reject_deposit?pass=admin123&deposit_id=${depositId}`);
+                const password = prompt('Введите пароль администратора');
+                if(!password) return;
+                const resp = await fetch(`/admin/reject_deposit?pass=${password}&deposit_id=${depositId}`);
                 const data = await resp.json();
                 if(data.success) { alert('✅ Заявка отклонена'); location.reload(); }
-                else { alert('❌ Ошибка'); }
+                else { alert('❌ Ошибка: ' + (data.error || 'Неверный пароль')); }
             }
             
             async function searchPlayer() {
                 const userId = document.getElementById('searchUserId').value;
                 if(!userId) return;
-                const resp = await fetch(`/admin/player?pass=admin123&user_id=${userId}`);
+                const password = prompt('Введите пароль администратора');
+                if(!password) return;
+                const resp = await fetch(`/admin/player?pass=${password}&user_id=${userId}`);
                 const data = await resp.json();
                 if(data.success) {
                     document.getElementById('searchResult').innerHTML = `
@@ -380,7 +387,7 @@ async def admin_panel(request: Request):
                             <h4>📊 Данные игрока</h4>
                             <p><strong>User ID:</strong> ${data.player.user_id}</p>
                             <p><strong>Имя:</strong> ${data.player.name}</p>
-                            <p><strong>💎 TON:</strong> ${data.player.ton}</p>
+                            <p><strong>💰 TON:</strong> ${data.player.ton}</p>
                             <p><strong>⚡ GPU:</strong> ${data.player.gpu}</p>
                             <p><strong>👥 Друзей:</strong> ${data.player.friends}</p>
                             <button onclick="giveBonus('${userId}')" style="background:#FFB347; border:none; padding:8px 16px; border-radius:8px;">🎁 Начислить бонус 10 TON</button>
@@ -394,11 +401,12 @@ async def admin_panel(request: Request):
             async function giveBonus(userId) {
                 const amount = prompt('Сколько TON начислить?', '10');
                 if(!amount) return;
-                const resp = await fetch(`/admin/give_bonus?pass=admin123&user_id=${userId}&amount=${amount}`);
+                const password = prompt('Введите пароль администратора');
+                if(!password) return;
+                const resp = await fetch(`/admin/give_bonus?pass=${password}&user_id=${userId}&amount=${amount}`);
                 const data = await resp.json();
                 if(data.success) alert(`✅ Начислено ${amount} TON!`);
-                else alert('❌ Ошибка');
-                searchPlayer();
+                else alert('❌ Ошибка: ' + (data.error || 'Неверный пароль'));
             }
         </script>
     </body>
