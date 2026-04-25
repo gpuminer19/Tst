@@ -309,69 +309,19 @@ function updateRefLink() {
   document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
 }
 
-// ========== АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ (ПРИ КАЖДОМ ЗАПРОСЕ) ==========
-async function apiRequest(action, additionalData = {}) {
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        action, 
-        user_id: userId.toString(), 
-        name: user?.first_name || "Игрок", 
-        ton: playerData.ton,  // отправляем текущий баланс
-        ...additionalData 
-      })
-    });
-    const result = await response.json();
-    
-    if (result.error === 'BANNED') { 
-      tg.showAlert(result.message || "❌ Аккаунт заблокирован"); 
-      return null; 
-    }
-    
-    // КЛЮЧЕВОЕ: после каждого ответа обновляем все данные
-    if (result?.success && result.data) {
+// ========== ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ БАЛАНСА ==========
+async function syncBalance() {
+  const result = await apiRequest("register", {});
+  if (result && result.success) {
+    if (playerData.ton !== result.data.ton) {
+      console.log(`🔄 Баланс синхронизирован: ${playerData.ton} → ${result.data.ton}`);
       playerData.ton = result.data.ton;
       playerData.gpuTokens = result.data.gpu;
-      playerData.friends = result.data.friends;
-      if (result.data.invitedFriends) playerData.invitedFriends = result.data.invitedFriends;
-      if (result.data.transactions) playerData.transactions = result.data.transactions;
       updateUI();
-      renderFriendsList();
-      renderHistory();
     }
-    
-    return result;
-  } catch (error) { 
-    console.error(error); 
-    tg.showAlert("❌ Ошибка связи"); 
-    return null; 
+    return result.data.ton;
   }
-}
-
-async function loadUserData(referrerId = null) {
-  const result = await apiRequest("register", { referrer_id: referrerId });
-  if (result?.success && result.data) {
-    playerData = { ton: result.data.ton, gpuTokens: result.data.gpu, friends: result.data.friends, invitedFriends: result.data.invitedFriends || [], transactions: result.data.transactions || [] };
-    gpuStates = result.data.state?.gpuStates || gpuTemplates.map(() => ({ active: false, totalTon: 0, totalGpu: 0, earnedTon: 0, earnedGpu: 0, startedAt: 0, durationMs: 0 }));
-    updateUI();
-    renderFriendsList();
-    renderHistory();
-    startAllMinings();
-    await checkAndActivateReferralCards();
-    return true;
-  }
-  return false;
-}
-
-async function saveGameState() {
-  await apiRequest("save", { 
-    ton: playerData.ton, 
-    gpu: playerData.gpuTokens, 
-    friends: playerData.friends, 
-    state: { gpuStates } 
-  });
+  return playerData.ton;
 }
 
 // ========== АКТИВАЦИЯ РЕФЕРАЛЬНЫХ КАРТ ==========
@@ -444,6 +394,9 @@ async function handleClaimReward(e) {
 }
 
 async function claimReferralReward(cardIndex) {
+  await syncBalance();
+  
+  const card = gpuTemplates[cardIndex];
   const state = gpuStates[cardIndex];
   if (!state || state.earnedTon < state.totalTon - 0.01) {
     tg.showAlert("⏳ Майнинг ещё не завершён");
@@ -455,9 +408,8 @@ async function claimReferralReward(cardIndex) {
     miningIntervals[cardIndex] = null;
   }
   
-  // apiRequest обновит баланс автоматически
-  const result = await apiRequest("claim", { cardIndex, type: "referral" });
-  
+  playerData.ton += state.totalTon;
+  playerData.gpuTokens += state.totalGpu;
   state.active = false;
   state.totalTon = 0;
   state.totalGpu = 0;
@@ -465,15 +417,55 @@ async function claimReferralReward(cardIndex) {
   state.earnedGpu = 0;
   state.startedAt = 0;
   state.durationMs = 0;
+  updateUI();
   renderCard(cardIndex);
-  
-  tg.showAlert(`🎉 Вы получили награду!`);
+  await saveGameState();
   await loadUserData();
+  tg.showAlert(`🎉 Вы получили ${state.totalTon} TON и ${state.totalGpu} GPU!`);
 }
 
-// ========== ЛОГИКА ВИДЕОКАРТ ==========
-function initGpuStates() {
-  gpuStates = gpuTemplates.map(() => ({ active: false, totalTon: 0, totalGpu: 0, earnedTon: 0, earnedGpu: 0, startedAt: 0, durationMs: 0 }));
+// ========== РАБОТА С БЭКЕНДОМ ==========
+async function apiRequest(action, additionalData = {}) {
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, user_id: userId.toString(), name: user?.first_name || "Игрок", ...additionalData })
+    });
+    const result = await response.json();
+    if (result.error === 'BANNED') { tg.showAlert(result.message || "❌ Аккаунт заблокирован"); return null; }
+    if (result?.success && result.data) {
+      playerData.ton = result.data.ton;
+      playerData.gpuTokens = result.data.gpu;
+      playerData.friends = result.data.friends;
+      if (result.data.invitedFriends) playerData.invitedFriends = result.data.invitedFriends;
+      if (result.data.transactions) playerData.transactions = result.data.transactions;
+      updateUI();
+      renderFriendsList();
+      renderHistory();
+    }
+    return result;
+  } catch (error) { console.error(error); tg.showAlert("❌ Ошибка связи"); return null; }
+}
+
+async function loadUserData(referrerId = null) {
+  const result = await apiRequest("register", { referrer_id: referrerId });
+  if (result?.success && result.data) {
+    playerData = { ton: result.data.ton, gpuTokens: result.data.gpu, friends: result.data.friends, invitedFriends: result.data.invitedFriends || [], transactions: result.data.transactions || [] };
+    gpuStates = result.data.state?.gpuStates || gpuTemplates.map(() => ({ active: false, totalTon: 0, totalGpu: 0, earnedTon: 0, earnedGpu: 0, startedAt: 0, durationMs: 0 }));
+    updateUI();
+    renderFriendsList();
+    renderHistory();
+    // НЕ вызываем renderAllCards() - карты уже отрисованы!
+    startAllMinings();
+    await checkAndActivateReferralCards();
+    return true;
+  }
+  return false;
+}
+
+async function saveGameState() {
+  await apiRequest("save", { ton: playerData.ton, gpu: playerData.gpuTokens, friends: playerData.friends, state: { gpuStates } });
 }
 
 async function loadReferrals() {
@@ -502,12 +494,20 @@ async function createWithdraw(amount, wallet) {
     tg.showAlert("✅ Заявка на вывод создана!");
     document.getElementById("withdrawAmount").value = "";
     document.getElementById("withdrawWallet").value = "";
+    await loadUserData();
     return true;
   }
   return false;
 }
 
+// ========== ЛОГИКА ВИДЕОКАРТ ==========
+function initGpuStates() {
+  gpuStates = gpuTemplates.map(() => ({ active: false, totalTon: 0, totalGpu: 0, earnedTon: 0, earnedGpu: 0, startedAt: 0, durationMs: 0 }));
+}
+
 async function buyGPU(idx) {
+  await syncBalance();
+  
   const gpu = gpuTemplates[idx];
   const state = gpuStates[idx];
   
@@ -520,8 +520,7 @@ async function buyGPU(idx) {
     return;
   }
   
-  // apiRequest обновит баланс автоматически
-  const result = await apiRequest("buy", { cardIndex: idx, price: gpu.price });
+  playerData.ton -= gpu.price;
   
   state.active = true;
   state.totalTon = gpu.tonReward;
@@ -535,9 +534,12 @@ async function buyGPU(idx) {
   renderCard(idx);
   startMining(idx);
   await saveGameState();
+  await loadUserData();
 }
 
 async function claimGPU(idx) {
+  await syncBalance();
+  
   const state = gpuStates[idx];
   if (state.earnedTon < state.totalTon - 0.01) {
     tg.showAlert("⏳ Майнинг ещё не завершён");
@@ -549,9 +551,8 @@ async function claimGPU(idx) {
     miningIntervals[idx] = null;
   }
   
-  // apiRequest обновит баланс автоматически
-  await apiRequest("claim", { cardIndex: idx, type: "gpu" });
-  
+  playerData.ton += state.totalTon;
+  playerData.gpuTokens += state.totalGpu;
   state.active = false;
   state.totalTon = 0;
   state.totalGpu = 0;
@@ -562,6 +563,7 @@ async function claimGPU(idx) {
   updateUI();
   renderCard(idx);
   await saveGameState();
+  await loadUserData();
 }
 
 function startMining(idx) {
@@ -573,6 +575,7 @@ function startMining(idx) {
   const state = gpuStates[idx];
   if (!state || !state.active) return;
   
+  // Функция обновления прогресса (без перерисовки всей карты)
   const updateProgress = () => {
     if (!gpuStates[idx] || !gpuStates[idx].active) {
       if (miningIntervals[idx]) {
@@ -588,6 +591,7 @@ function startMining(idx) {
     currentState.earnedTon = currentState.totalTon * progress;
     currentState.earnedGpu = currentState.totalGpu * progress;
     
+    // Обновляем только DOM-элементы, не перерисовывая всю карту
     const fill = document.getElementById(`fill_${idx}`);
     const text = document.getElementById(`text_${idx}`);
     if (fill) fill.style.width = (progress * 100) + "%";
@@ -599,14 +603,14 @@ function startMining(idx) {
       currentState.active = false;
       currentState.earnedTon = currentState.totalTon;
       currentState.earnedGpu = currentState.totalGpu;
-      renderCard(idx);
+      renderCard(idx); // перерисовываем только когда майнинг закончен
       saveGameState();
       if (typeof updateReferralCardsStatus === 'function') updateReferralCardsStatus();
     }
   };
   
   updateProgress();
-  miningIntervals[idx] = setInterval(updateProgress, 1000);
+  miningIntervals[idx] = setInterval(updateProgress, 1000); // обновление раз в секунду
 }
 
 function startAllMinings() {
@@ -659,7 +663,7 @@ function showPayInfo(deposit) {
 
 function copyText(text) { navigator.clipboard.writeText(text); tg.showAlert("📋 Скопировано"); }
 
-// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК (БЕЗ АВТООБНОВЛЕНИЯ) ==========
+// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ==========
 window.openTab = function(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
