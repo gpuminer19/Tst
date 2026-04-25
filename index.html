@@ -86,7 +86,7 @@
     <div class="balance-card">
       <div class="balance-label">💰 TON Balance</div>
       <div class="balance-value">
-        <span id="ton">5.00</span>
+        <span id="ton">0</span>
         <img src="ton.png" class="currency-icon">
       </div>
     </div>
@@ -138,7 +138,7 @@
     <h3>💳 Пополнить баланс TON</h3>
     <label>Сумма пополнения (TON)</label>
     <input id="depositAmount" type="number" min="0.1" step="0.1" placeholder="Например, 5">
-    <button class="pay-btn" id="payBtn" onclick="createDeposit()">💎 Оплатить</button>
+    <button class="pay-btn" id="payBtn">💎 Оплатить</button>
     <div id="payResult"></div>
   </div>
 </div>
@@ -156,23 +156,28 @@
 
 <script>
 
-const API_URL = "https://tst-production-b90a.up.railway.app/api/tg";
- 
-let tg = window.Telegram.WebApp;
-tg.ready();
-tg.expand();
+// ========== НАСТРОЙКИ ==========
+const API_URL = "https://9Oa.up.railway.app/api/tg"; // ЗАМЕНИТЕ НА ВАШ URL
+const BOT_USERNAME = "Gputonminer_bot";
 
+// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
+let tg = window.Telegram.WebApp;
 let user = tg.initDataUnsafe?.user;
 let userId = user?.id || "test_" + Math.floor(Math.random() * 10000);
 
+// Данные игрока (загружаются с сервера)
 let playerData = {
-  ton: 5.0,
+  ton: 0,
   gpuTokens: 0,
   friends: 0,
-  referrerId: null,
   invitedFriends: []
 };
 
+// Состояние видеокарт (с сервера)
+let gpuStates = [];
+let miningIntervals = [];
+
+// Шаблоны видеокарт
 const gpuTemplates = [
   { name: "GTX 1060", price: 1, tonReward: 1.2, gpuReward: 2, durationMs: 60000 },
   { name: "RTX 2060", price: 2, tonReward: 2.4, gpuReward: 4, durationMs: 120000 },
@@ -180,24 +185,114 @@ const gpuTemplates = [
   { name: "EPIC GPU", price: 5, tonReward: 6, gpuReward: 10, durationMs: 300000 }
 ];
 
-let gpuStates = [];
-let refActive = false;
-let refEarnedTon = 0, refEarnedGpu = 0;
-let refTargetTon = 0, refTargetGpu = 0;
-let refInterval = null;
-let miningTimers = [];
-
-if (user) {
-  document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
-  if (user.username) document.getElementById("userStatus").innerHTML = `@${user.username}`;
-  let avatarLetter = (user.first_name ? user.first_name[0] : (user.username ? user.username[0].toUpperCase() : "👤"));
-  document.getElementById("avatar").innerText = avatarLetter;
-  document.getElementById("userIdShort").innerText = `#${userId.toString().slice(-5)}`;
-} else {
-  document.getElementById("userFirstName").innerText = "Тестовый игрок";
-  document.getElementById("userIdShort").innerText = `#${userId.slice(-5)}`;
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+function updateUI() {
+  document.getElementById("ton").innerText = playerData.ton.toFixed(2);
+  document.getElementById("gpuBalance").innerText = playerData.gpuTokens;
+  document.getElementById("friendCount").innerText = playerData.friends;
 }
 
+function updateRefLink() {
+  document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
+}
+
+function renderFriendsList() {
+  const container = document.getElementById("friendsList");
+  if (!container) return;
+  if (!playerData.invitedFriends || playerData.invitedFriends.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding:10px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>';
+    return;
+  }
+  container.innerHTML = playerData.invitedFriends.map(f => `
+    <div class="friend-item">
+      <div class="friend-avatar">👤</div>
+      <div class="friend-info">
+        <div class="friend-name">${f.friend_name || f.name}</div>
+        <div class="friend-date">Присоединился: ${f.date || "недавно"}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ========== РАБОТА С БЭКЕНДОМ ==========
+async function apiRequest(action, additionalData = {}) {
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: action,
+        user_id: userId.toString(),
+        name: user?.first_name || "Игрок",
+        ...additionalData
+      })
+    });
+    return await response.json();
+  } catch (error) {
+    console.error(`API Error (${action}):`, error);
+    tg.showAlert("❌ Ошибка связи с сервером");
+    return null;
+  }
+}
+
+// Загрузка данных пользователя
+async function loadUserData(referrerId = null) {
+  const result = await apiRequest("register", { referrer_id: referrerId });
+  if (result && result.success) {
+    playerData = {
+      ton: result.data.ton,
+      gpuTokens: result.data.gpu,
+      friends: result.data.friends,
+      invitedFriends: result.data.invitedFriends || []
+    };
+    
+    // Восстанавливаем состояние видеокарт
+    if (result.data.state && result.data.state.gpuStates) {
+      gpuStates = result.data.state.gpuStates;
+    } else {
+      initGpuStates();
+    }
+    
+    updateUI();
+    renderFriendsList();
+    renderAllCards();
+    startAllMinings();
+    return true;
+  }
+  return false;
+}
+
+// Сохранение состояния видеокарт
+async function saveGameState() {
+  await apiRequest("save", {
+    ton: playerData.ton,
+    gpu: playerData.gpuTokens,
+    friends: playerData.friends,
+    state: { gpuStates: gpuStates }
+  });
+}
+
+// Загрузка рефералов
+async function loadReferrals() {
+  const result = await apiRequest("getReferrals");
+  if (result && result.success && result.referrals) {
+    playerData.invitedFriends = result.referrals;
+    playerData.friends = result.referrals.length;
+    renderFriendsList();
+    updateUI();
+  }
+}
+
+// Создание заявки на пополнение
+async function createDeposit(amount) {
+  const result = await apiRequest("createDeposit", { amount: amount });
+  if (result && result.success) {
+    showPayInfo(result.deposit);
+  } else {
+    tg.showAlert("❌ Ошибка создания заявки");
+  }
+}
+
+// ========== ЛОГИКА ВИДЕОКАРТ ==========
 function initGpuStates() {
   gpuStates = gpuTemplates.map(() => ({
     active: false,
@@ -210,229 +305,208 @@ function initGpuStates() {
   }));
 }
 
-function updateUI() {
-  document.getElementById("ton").innerText = playerData.ton.toFixed(2);
-  document.getElementById("gpuBalance").innerText = playerData.gpuTokens;
-  document.getElementById("friendCount").innerText = playerData.friends;
-  updateRefLink();
-}
-
-function updateRefLink() {
-  const botUsername = "Gputonminer_bot";
-  document.getElementById("refLink").innerText = `https://t.me/${botUsername}?start=ref_${userId}`;
-}
-
-function renderFriendsList() {
-  const container = document.getElementById("friendsList");
-  if (!container) return;
-  if (playerData.invitedFriends.length === 0) {
-    container.innerHTML = '<div style="text-align:center; padding:10px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>';
-    return;
-  }
-  container.innerHTML = playerData.invitedFriends.map(f => `
-    <div class="friend-item">
-      <div class="friend-avatar">👤</div>
-      <div class="friend-info">
-        <div class="friend-name">${f.name}</div>
-        <div class="friend-date">Присоединился: ${f.date}</div>
-      </div>
-    </div>`).join('');
-}
-
-async function syncWithBackend() {
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "register",
-        user_id: userId.toString(),
-        name: user?.first_name || "Игрок",
-        referrer_id: playerData.referrerId
-      })
-    });
-    const result = await response.json();
-    if (result.success && result.data) {
-      playerData.ton = result.data.ton;
-      playerData.gpuTokens = result.data.gpu;
-      playerData.friends = result.data.friends;
-
-      const saved = result.data.state || {};
-      if (Array.isArray(saved.gpuStates) && saved.gpuStates.length === gpuTemplates.length) {
-        gpuStates = saved.gpuStates.map(s => ({
-          active: !!s.active,
-          totalTon: Number(s.totalTon) || 0,
-          totalGpu: Number(s.totalGpu) || 0,
-          earnedTon: Number(s.earnedTon) || 0,
-          earnedGpu: Number(s.earnedGpu) || 0,
-          startedAt: Number(s.startedAt) || 0,
-          durationMs: Number(s.durationMs) || 0
-        }));
-      } else {
-        initGpuStates();
-      }
-      
-      updateUI();
-      restoreCardsUI();
-      await loadReferrals();
-    }
-  } catch(e) {
-    console.log("Ошибка подключения к бэкенду:", e);
-    tg.showAlert("⚠️ Не удалось подключиться к серверу, но игра работает локально");
-  }
-}
-
-function restoreCardsUI() {
-  miningTimers.forEach(timer => clearTimeout(timer));
-  miningTimers = [];
+async function buyGPU(idx) {
+  const gpu = gpuTemplates[idx];
+  const state = gpuStates[idx];
   
-  gpuStates.forEach((s, idx) => {
-    if (s.active && s.startedAt && s.durationMs) {
-      const elapsed = Date.now() - s.startedAt;
-      if (elapsed >= s.durationMs) {
-        s.active = false;
-        s.earnedTon = s.totalTon;
-        s.earnedGpu = s.totalGpu;
-        renderCard(idx, 'claim');
-        saveToBackend();
-      } else {
-        const progress = elapsed / s.durationMs;
-        s.earnedTon = s.totalTon * progress;
-        s.earnedGpu = s.totalGpu * progress;
-        renderCard(idx, 'farm');
-        startMiningTimer(idx);
-      }
-    } else if (s.totalTon > 0 && !s.active) {
-      renderCard(idx, 'claim');
-    } else {
-      renderCard(idx, 'buy');
-    }
-  });
-}
-
-function startMiningTimer(idx) {
-  const s = gpuStates[idx];
-  const tick = () => {
-    if (!s.active) return;
-    const elapsed = Date.now() - s.startedAt;
-    const progress = Math.min(1, elapsed / s.durationMs);
-    s.earnedTon = s.totalTon * progress;
-    s.earnedGpu = s.totalGpu * progress;
-    const fill = document.getElementById(`fill_${idx}`);
-    const txt = document.getElementById(`text_${idx}`);
-    if (fill) fill.style.width = (progress * 100) + "%";
-    if (txt) txt.innerHTML = `${s.earnedTon.toFixed(2)}/${s.totalTon.toFixed(1)} TON`;
-    if (progress >= 1) {
-      s.active = false;
-      s.earnedTon = s.totalTon;
-      s.earnedGpu = s.totalGpu;
-      renderCard(idx, 'claim');
-      saveToBackend();
-    } else {
-      const timer = setTimeout(tick, 500);
-      miningTimers.push(timer);
-    }
-  };
-  const timer = setTimeout(tick, 500);
-  miningTimers.push(timer);
-}
-
-function buildStatePayload() {
-  return {
-    gpuStates: gpuStates,
-    refState: { refTargetTon, refTargetGpu, refEarnedTon, refEarnedGpu }
-  };
-}
-
-async function loadReferrals() {
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "getReferrals", user_id: userId.toString() })
-    });
-    const result = await response.json();
-    if (result.success && result.referrals) {
-      playerData.invitedFriends = result.referrals.map(ref => ({
-        name: ref.friend_name,
-        date: ref.date || "недавно"
-      }));
-      playerData.friends = playerData.invitedFriends.length;
-      renderFriendsList();
-      updateUI();
-    }
-  } catch(e) { console.log("Ошибка загрузки рефералов"); }
-}
-
-async function saveToBackend(tonEarned = 0) {
-  try {
-    await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "save",
-        user_id: userId.toString(),
-        ton: playerData.ton,
-        gpu: playerData.gpuTokens,
-        friends: playerData.friends,
-        ton_earned: tonEarned,
-        state: buildStatePayload()
-      })
-    });
-  } catch(e) { console.log("Ошибка сохранения"); }
-}
-
-// ============ ПОПОЛНЕНИЕ ============
-async function createDeposit() {
-  const input = document.getElementById('depositAmount');
-  const amount = Number(input.value);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    tg.showAlert("❌ Введите корректную сумму");
+  if (playerData.ton < gpu.price) {
+    tg.showAlert("❌ Недостаточно TON");
     return;
   }
-  const btn = document.getElementById('payBtn');
-  btn.disabled = true;
-  btn.textContent = "⏳ Создаём заявку...";
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "createDeposit",
-        user_id: userId.toString(),
-        name: user?.first_name || "Игрок",
-        amount: amount
-      })
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || "Ошибка");
-    showPayInfo(data.deposit);
-  } catch(e) {
-    tg.showAlert("❌ " + (e.message || "Не удалось создать заявку"));
+  if (state.active) {
+    tg.showAlert("⏳ Карта уже майнит");
+    return;
   }
-  btn.disabled = false;
-  btn.innerHTML = "💎 Оплатить";
+  
+  // Списываем средства
+  playerData.ton -= gpu.price;
+  
+  // Активируем майнинг
+  state.active = true;
+  state.totalTon = gpu.tonReward;
+  state.totalGpu = gpu.gpuReward;
+  state.earnedTon = 0;
+  state.earnedGpu = 0;
+  state.startedAt = Date.now();
+  state.durationMs = gpu.durationMs;
+  
+  updateUI();
+  renderCard(idx);
+  startMining(idx);
+  await saveGameState();
 }
 
-function showPayInfo(d) {
+async function claimGPU(idx) {
+  const state = gpuStates[idx];
+  if (state.earnedTon < state.totalTon - 0.01) {
+    tg.showAlert("⏳ Майнинг ещё не завершён");
+    return;
+  }
+  
+  // Начисляем награду
+  playerData.ton += state.totalTon;
+  playerData.gpuTokens += state.totalGpu;
+  
+  // Сбрасываем карту
+  state.active = false;
+  state.totalTon = 0;
+  state.totalGpu = 0;
+  state.earnedTon = 0;
+  state.earnedGpu = 0;
+  state.startedAt = 0;
+  state.durationMs = 0;
+  
+  updateUI();
+  renderCard(idx);
+  await saveGameState();
+}
+
+function startMining(idx) {
+  // Очищаем предыдущий интервал
+  if (miningIntervals[idx]) clearInterval(miningIntervals[idx]);
+  
+  const state = gpuStates[idx];
+  if (!state.active) return;
+  
+  miningIntervals[idx] = setInterval(() => {
+    const elapsed = Date.now() - state.startedAt;
+    const progress = Math.min(1, elapsed / state.durationMs);
+    state.earnedTon = state.totalTon * progress;
+    state.earnedGpu = state.totalGpu * progress;
+    
+    // Обновляем прогресс-бар
+    const fill = document.getElementById(`fill_${idx}`);
+    const text = document.getElementById(`text_${idx}`);
+    if (fill) fill.style.width = (progress * 100) + "%";
+    if (text) text.innerHTML = `${state.earnedTon.toFixed(2)}/${state.totalTon.toFixed(1)} TON`;
+    
+    // Если майнинг завершён
+    if (progress >= 1) {
+      clearInterval(miningIntervals[idx]);
+      state.active = false;
+      state.earnedTon = state.totalTon;
+      state.earnedGpu = state.totalGpu;
+      renderCard(idx);
+      saveGameState();
+    }
+  }, 500);
+}
+
+function startAllMinings() {
+  for (let i = 0; i < gpuStates.length; i++) {
+    if (gpuStates[i] && gpuStates[i].active) {
+      startMining(i);
+    }
+  }
+}
+
+// ========== ОТРИСОВКА КАРТОЧЕК ==========
+function renderCard(idx) {
+  const card = document.getElementById(`card_${idx}`);
+  if (!card) return;
+  
+  const gpu = gpuTemplates[idx];
+  const state = gpuStates[idx];
+  
+  if (state.active) {
+    // Активный майнинг
+    const progress = (Date.now() - state.startedAt) / state.durationMs;
+    const percent = Math.min(100, progress * 100);
+    card.innerHTML = `
+      <img src="8.png" class="gpu-img">
+      <div class="card-info">
+        <h3>${gpu.name} ⚡</h3>
+        <div class="progress-bar">
+          <div class="progress-fill" id="fill_${idx}" style="width:${percent}%"></div>
+          <div class="progress-text" id="text_${idx}">${state.earnedTon.toFixed(2)}/${state.totalTon} TON</div>
+        </div>
+      </div>
+    `;
+  } else if (state.totalTon > 0 && state.earnedTon >= state.totalTon - 0.01) {
+    // Готово к получению
+    card.innerHTML = `
+      <img src="8.png" class="gpu-img">
+      <div class="card-info">
+        <h3>${gpu.name}</h3>
+        <button class="claim-btn claim-gpu">🎁 Забрать ${state.totalTon} TON + ${state.totalGpu} GPU</button>
+      </div>
+    `;
+    const claimBtn = card.querySelector('.claim-gpu');
+    if (claimBtn) claimBtn.onclick = () => claimGPU(idx);
+  } else {
+    // Доступна для покупки
+    card.innerHTML = `
+      <img src="8.png" class="gpu-img">
+      <div class="card-info">
+        <h3>${gpu.name} <span class="badge">+20%</span></h3>
+        <div class="rewards-info"><span>+${gpu.tonReward} TON</span><span>+${gpu.gpuReward} GPU</span></div>
+        <button class="buy-btn">Купить ${gpu.price} TON</button>
+      </div>
+    `;
+    const buyBtn = card.querySelector('.buy-btn');
+    if (buyBtn) buyBtn.onclick = () => buyGPU(idx);
+  }
+}
+
+function renderAllCards() {
+  for (let i = 0; i < gpuTemplates.length; i++) {
+    renderCard(i);
+  }
+}
+
+function initGrid() {
+  const grid = document.getElementById("grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  for (let i = 0; i < gpuTemplates.length; i++) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.id = `card_${i}`;
+    grid.appendChild(card);
+    renderCard(i);
+  }
+}
+
+// ========== РЕФЕРАЛЬНАЯ СИСТЕМА ==========
+function getRefRewards() {
+  if (playerData.friends >= 50) return { ton: 10, gpu: 50 };
+  if (playerData.friends >= 5) return { ton: 1, gpu: 5 };
+  return { ton: 0, gpu: 0 };
+}
+
+async function startRefMining() {
+  const rewards = getRefRewards();
+  if (rewards.ton === 0) return;
+  
+  // Отправляем запрос на старт реферального майнинга
+  const result = await apiRequest("startRefMining", { rewards });
+  if (result && result.success) {
+    tg.showAlert(`🎉 Майнинг начат! Через несколько секунд вы получите ${rewards.ton} TON и ${rewards.gpu} GPU`);
+    // Обновляем данные после майнинга
+    setTimeout(() => loadUserData(), 5000);
+  }
+}
+
+// ========== АДМИН-ПАНЕЛЬ В ИГРЕ (опционально) ==========
+function showPayInfo(deposit) {
   const html = `
     <div class="pay-info">
       <div class="row">
         <div class="lbl">Сумма</div>
-        <span class="val">${d.amount} TON</span>
+        <span class="val">${deposit.amount} TON</span>
       </div>
       <div class="row">
         <div class="lbl">TON-кошелёк для перевода</div>
-        <span class="val" id="payWallet">${d.wallet}</span>
-        <button class="copy-mini" onclick="copyText('${d.wallet}')">📋</button>
+        <span class="val" id="payWallet">${deposit.wallet}</span>
+        <button class="copy-mini" onclick="copyText('${deposit.wallet}')">📋</button>
       </div>
       <div class="row">
         <div class="lbl">Комментарий к переводу (обязательно!)</div>
-        <span class="val" id="payComment">${d.comment}</span>
-        <button class="copy-mini" onclick="copyText('${d.comment}')">📋</button>
+        <span class="val" id="payComment">${deposit.comment}</span>
+        <button class="copy-mini" onclick="copyText('${deposit.comment}')">📋</button>
       </div>
       <div class="pay-warn">
-        ⚠️ Отправьте ровно <b>${d.amount} TON</b> на указанный кошелёк <b>с комментарием</b> выше.
+        ⚠️ Отправьте ровно <b>${deposit.amount} TON</b> на указанный кошелёк <b>с комментарием</b> выше.
         После подтверждения админом баланс будет зачислен автоматически.
       </div>
     </div>`;
@@ -444,184 +518,82 @@ function copyText(text) {
   tg.showAlert("📋 Скопировано");
 }
 
-// ============ РЕФЕРАЛЫ ============
-function getRefRewards() {
-  if (playerData.friends >= 50) return { ton: 10, gpu: 50 };
-  if (playerData.friends >= 5) return { ton: 1, gpu: 5 };
-  return { ton: 0, gpu: 0 };
-}
-
-function updateRefUI() {
-  const container = document.getElementById("refStatus");
-  if (!container) return;
-  const rewards = getRefRewards();
-  if (rewards.ton === 0) {
-    let needed = 5 - playerData.friends;
-    container.innerHTML = `<div style="padding:8px; text-align:center; background:rgba(0,0,0,0.3); border-radius:16px; font-size:12px;">
-      🔒 Требуется ещё ${needed} ${needed === 1 ? 'друг' : (needed < 5 ? 'друга' : 'друзей')}</div>`;
-    return;
-  }
-  if (!refActive) {
-    container.innerHTML = `<button id="startRefBtn" style="background:#FF8C00;">⛏️ Майнить ${rewards.ton} TON + ${rewards.gpu} GPU</button>`;
-    const btn = document.getElementById("startRefBtn");
-    if (btn) btn.onclick = startRefMining;
-  } else {
-    const percent = refTargetTon ? (refEarnedTon / refTargetTon) * 100 : 0;
-    container.innerHTML = `<div class="progress-bar">
-      <div class="progress-fill" id="refFill" style="width:${percent}%"></div>
-      <div class="progress-text" id="refText">${refEarnedTon.toFixed(1)}/${refTargetTon} TON + ${Math.floor(refEarnedGpu)}/${refTargetGpu} GPU</div></div>`;
-  }
-  if (refActive && refEarnedTon >= refTargetTon - 0.01) finishRefMining();
-}
-
-function finishRefMining() {
-  if (refInterval) clearInterval(refInterval);
-  refActive = false;
-  document.getElementById("refStatus").innerHTML = `<button id="claimRefBtn" class="claim-btn">🎁 Забрать ${refTargetTon} TON + ${refTargetGpu} GPU</button>`;
-  const btn = document.getElementById("claimRefBtn");
-  if (btn) btn.onclick = () => {
-    playerData.ton += refTargetTon;
-    playerData.gpuTokens += refTargetGpu;
-    saveToBackend(refTargetTon);
-    updateUI();
-    refEarnedTon = 0; refTargetTon = 0;
-    refEarnedGpu = 0; refTargetGpu = 0;
-    updateRefUI();
-  };
-}
-
-function startRefMining() {
-  const rewards = getRefRewards();
-  if (rewards.ton === 0 || refActive) return;
-  refActive = true;
-  refTargetTon = rewards.ton;
-  refTargetGpu = rewards.gpu;
-  refEarnedTon = 0; refEarnedGpu = 0;
-  let step = 0, steps = 10;
-  const incTon = refTargetTon / steps;
-  const incGpu = refTargetGpu / steps;
-  updateRefUI();
-  if (refInterval) clearInterval(refInterval);
-  refInterval = setInterval(() => {
-    if (!refActive) { clearInterval(refInterval); return; }
-    step++;
-    refEarnedTon = Math.min(refEarnedTon + incTon, refTargetTon);
-    refEarnedGpu = Math.min(refEarnedGpu + incGpu, refTargetGpu);
-    const fill = document.getElementById("refFill");
-    const txt = document.getElementById("refText");
-    if (fill) fill.style.width = (refEarnedTon / refTargetTon * 100) + "%";
-    if (txt) txt.innerHTML = `${refEarnedTon.toFixed(1)}/${refTargetTon} TON + ${Math.floor(refEarnedGpu)}/${refTargetGpu} GPU`;
-    if (step >= steps) { clearInterval(refInterval); finishRefMining(); }
-  }, 700);
-}
-
-function renderCard(idx, state) {
-  const card = document.getElementById(`card_${idx}`);
-  if (!card) return;
-  const g = gpuTemplates[idx];
-  const s = gpuStates[idx];
-  if (state === 'buy') {
-    card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info">
-      <h3>${g.name} <span class="badge">+20%</span></h3>
-      <div class="rewards-info"><span>+${g.tonReward} TON</span><span>+${g.gpuReward} GPU</span></div>
-      <button class="buy-btn">Купить ${g.price} TON</button></div>`;
-    const buyBtn = card.querySelector('.buy-btn');
-    if (buyBtn) buyBtn.onclick = () => buyGPU(idx);
-  } else if (state === 'farm') {
-    card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info">
-      <h3>${g.name} ⚡</h3>
-      <div class="progress-bar"><div class="progress-fill" id="fill_${idx}"></div><div class="progress-text" id="text_${idx}">${s.earnedTon.toFixed(2)}/${s.totalTon} TON</div></div>
-    </div>`;
-  } else {
-    card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info">
-      <h3>${g.name}</h3>
-      <button class="claim-btn claim-gpu">🎁 Забрать ${s.totalTon} TON + ${s.totalGpu} GPU</button></div>`;
-    const claimBtn = card.querySelector('.claim-gpu');
-    if (claimBtn) claimBtn.onclick = () => claimGPU(idx);
-  }
-}
-
-function buyGPU(idx) {
-  const g = gpuTemplates[idx];
-  const s = gpuStates[idx];
-  if (playerData.ton < g.price) { tg.showAlert("❌ Недостаточно TON"); return; }
-  if (s.active) { tg.showAlert("⏳ Карта уже майнит"); return; }
-  playerData.ton -= g.price;
-  s.active = true;
-  s.totalTon = g.tonReward;
-  s.totalGpu = g.gpuReward;
-  s.earnedTon = 0;
-  s.earnedGpu = 0;
-  s.startedAt = Date.now();
-  s.durationMs = g.durationMs;
-  saveToBackend();
-  updateUI();
-  renderCard(idx, 'farm');
-  startMiningTimer(idx);
-}
-
-function claimGPU(idx) {
-  const s = gpuStates[idx];
-  if (s.earnedTon < s.totalTon - 0.01) return;
-  playerData.ton += s.totalTon;
-  playerData.gpuTokens += s.totalGpu;
-  saveToBackend(s.totalTon);
-  s.totalTon = 0; s.totalGpu = 0;
-  s.earnedTon = 0; s.earnedGpu = 0;
-  s.startedAt = 0; s.durationMs = 0;
-  s.active = false;
-  updateUI();
-  renderCard(idx, 'buy');
-}
-
-function initGrid() {
-  const grid = document.getElementById("grid");
-  if (!grid) return;
-  grid.innerHTML = "";
-  gpuTemplates.forEach((_, i) => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.id = `card_${i}`;
-    grid.appendChild(card);
-    renderCard(i, 'buy');
-  });
-}
-
+// ========== НАВИГАЦИЯ ==========
 window.openTab = function(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  const tab = document.getElementById(id);
-  if (tab) tab.classList.add("active");
+  document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
-  if (id === "referral") { updateRefUI(); renderFriendsList(); }
+  if (id === "referral") {
+    loadReferrals();
+    updateRefLink();
+  }
 };
 
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
+  // Настраиваем Telegram
+  tg.ready();
+  tg.expand();
+  
+  // Отображаем информацию о пользователе
+  if (user) {
+    document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
+    if (user.username) document.getElementById("userStatus").innerHTML = `@${user.username}`;
+    let avatarLetter = (user.first_name ? user.first_name[0] : (user.username ? user.username[0].toUpperCase() : "👤"));
+    document.getElementById("avatar").innerText = avatarLetter;
+    document.getElementById("userIdShort").innerText = `#${userId.toString().slice(-5)}`;
+  } else {
+    document.getElementById("userFirstName").innerText = "Тестовый игрок";
+    document.getElementById("userIdShort").innerText = `#${userId.slice(-5)}`;
+  }
+  
+  // Получаем реферальный ID из start_param
+  let referrerId = null;
+  if (tg.initDataUnsafe?.start_param) {
+    const startParam = tg.initDataUnsafe.start_param;
+    if (startParam.startsWith('ref_')) {
+      referrerId = startParam.replace('ref_', '');
+    }
+  }
+  
+  // Загружаем данные с сервера
   initGpuStates();
   initGrid();
-  await syncWithBackend();
-  updateRefUI();
-  const loading = document.getElementById("loading");
-  const appDiv = document.getElementById("app");
-  if (loading) loading.style.display = "none";
-  if (appDiv) appDiv.style.display = "block";
+  const loaded = await loadUserData(referrerId);
+  if (loaded) {
+    updateRefLink();
+    await loadReferrals();
+  }
+  
+  // Скрываем загрузку, показываем игру
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  
+  tg.MainButton.hide();
+  tg.BackButton.hide();
 }
 
-const copyRefBtn = document.getElementById("copyRefBtn");
-if (copyRefBtn) {
-  copyRefBtn.onclick = () => {
-    const link = document.getElementById("refLink");
-    if (link) {
-      navigator.clipboard.writeText(link.innerText);
-      tg.showAlert("📋 Реферальная ссылка скопирована!");
-    }
-  };
-}
+// Обработчик кнопки пополнения
+document.getElementById("payBtn").onclick = () => {
+  const amount = parseFloat(document.getElementById("depositAmount").value);
+  if (isNaN(amount) || amount <= 0) {
+    tg.showAlert("❌ Введите корректную сумму");
+    return;
+  }
+  createDeposit(amount);
+};
 
+// Обработчик копирования реферальной ссылки
+document.getElementById("copyRefBtn").onclick = () => {
+  const link = document.getElementById("refLink").innerText;
+  navigator.clipboard.writeText(link);
+  tg.showAlert("📋 Реферальная ссылка скопирована!");
+};
+
+// Запуск
 init();
-tg.MainButton.hide();
-tg.BackButton.hide();
- 
+
 </script>
 </body>
 </html>
