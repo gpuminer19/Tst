@@ -136,7 +136,6 @@
     </div>
   </div>
 
-  <!-- Реферальные карты -->
   <div class="referral-cards-grid">
     <div class="card" id="refCardBasic" style="border-color:#FFB347;">
       <img src="8.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFB347);">
@@ -236,19 +235,17 @@ let playerData = {
 let gpuStates = [];
 let miningIntervals = [];
 
-// ========== ВИДЕОКАРТЫ ==========
 const gpuTemplates = [
   { name: "GTX 1060", price: 1, tonReward: 1.2, gpuReward: 2, durationMs: 60000 },
   { name: "RTX 2060", price: 2, tonReward: 2.4, gpuReward: 4, durationMs: 120000 },
   { name: "RTX 3060", price: 3, tonReward: 3.6, gpuReward: 6, durationMs: 180000 },
   { name: "EPIC GPU", price: 5, tonReward: 6, gpuReward: 10, durationMs: 300000 },
-  // ========== РЕФЕРАЛЬНЫЕ КАРТЫ (активируются автоматически) ==========
   { name: "👥 BASIC GPU", price: 0, tonReward: 1, gpuReward: 5, durationMs: 60000, requiredFriends: 10, tier: "basic" },
   { name: "🔥 ULTRA GPU", price: 0, tonReward: 5, gpuReward: 25, durationMs: 120000, requiredFriends: 50, tier: "ultra" },
   { name: "💎 LEGENDARY GPU", price: 0, tonReward: 20, gpuReward: 100, durationMs: 300000, requiredFriends: 150, tier: "legendary" }
 ];
 
-// ========== ОЧИСТКА ТАЙМЕРОВ (ЗАЩИТА ОТ ДВОЙНЫХ) ==========
+// ========== ОЧИСТКА ТАЙМЕРОВ ==========
 function clearAllMinings() {
   for (let i = 0; i < miningIntervals.length; i++) {
     if (miningIntervals[i]) {
@@ -606,6 +603,7 @@ function renderCard(idx) {
 }
 
 function renderAllCards() { for (let i = 0; i < gpuTemplates.length; i++) renderCard(i); }
+
 function initGrid() {
   const grid = document.getElementById("grid");
   if (!grid) return;
@@ -623,15 +621,34 @@ function initGrid() {
 function showPayInfo(deposit) {
   document.getElementById('payResult').innerHTML = `<div class="pay-info"><div class="row"><div class="lbl">Сумма</div><span class="val">${deposit.amount} TON</span></div><div class="row"><div class="lbl">Кошелёк</div><span class="val">${deposit.wallet}</span><button class="copy-mini" onclick="copyText('${deposit.wallet}')">📋</button></div><div class="row"><div class="lbl">Комментарий</div><span class="val">${deposit.comment}</span><button class="copy-mini" onclick="copyText('${deposit.comment}')">📋</button></div><div class="pay-warn">⚠️ Отправьте ровно <b>${deposit.amount} TON</b> с комментарием</div></div>`;
 }
+
 function copyText(text) { navigator.clipboard.writeText(text); tg.showAlert("📋 Скопировано"); }
 
-window.openTab = function(id, btn) {
+// ========== ОБНОВЛЕННАЯ ФУНКЦИЯ OPEN TAB ==========
+window.openTab = async function(id, btn) {
+  // Переключаем вкладки
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
-  if (id === "referral") { loadReferrals(); updateRefLink(); updateReferralCardsStatus(); }
-  if (id === "wallet") renderHistory();
+  
+  // 👇 ОБНОВЛЯЕМ ДАННЫЕ ПРИ ПЕРЕКЛЮЧЕНИИ ВКЛАДОК
+  if (id === "home") {
+    await loadUserData();  // Обновляем баланс на главной
+    renderAllCards();      // Перерисовываем карты
+    updateUI();            // Обновляем интерфейс
+  }
+  if (id === "referral") {
+    await loadReferrals(); // Обновляем список друзей
+    updateRefLink();       // Обновляем реферальную ссылку
+    await loadUserData();  // Обновляем баланс (на всякий случай)
+  }
+  if (id === "wallet") {
+    await loadUserData();  // Обновляем баланс и историю
+    renderHistory();       // Показываем свежую историю
+  }
+  
+  console.log(`🔄 Данные обновлены при переходе на вкладку: ${id}`);
 };
 
 function keepAlive() { setInterval(async () => { try { await fetch(API_URL, { method: 'HEAD' }); } catch(e) {} }, 4 * 60 * 1000); }
@@ -663,7 +680,8 @@ async function init() {
   updateRefLink();
   await loadReferrals();
   keepAlive();
-  setInterval(async () => { await loadUserData(); }, 60000);
+  // Автообновление раз в 2 минуты (как запасной вариант)
+  setInterval(async () => { await loadUserData(); }, 120000);
   document.getElementById("loading").style.display = "none";
   document.getElementById("app").style.display = "block";
   tg.MainButton.hide(); tg.BackButton.hide();
