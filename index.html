@@ -242,11 +242,21 @@ const gpuTemplates = [
   { name: "RTX 2060", price: 2, tonReward: 2.4, gpuReward: 4, durationMs: 120000 },
   { name: "RTX 3060", price: 3, tonReward: 3.6, gpuReward: 6, durationMs: 180000 },
   { name: "EPIC GPU", price: 5, tonReward: 6, gpuReward: 10, durationMs: 300000 },
-  // ========== РЕФЕРАЛЬНЫЕ КАРТЫ ==========
+  // ========== РЕФЕРАЛЬНЫЕ КАРТЫ (активируются автоматически) ==========
   { name: "👥 BASIC GPU", price: 0, tonReward: 1, gpuReward: 5, durationMs: 60000, requiredFriends: 10, tier: "basic" },
   { name: "🔥 ULTRA GPU", price: 0, tonReward: 5, gpuReward: 25, durationMs: 120000, requiredFriends: 50, tier: "ultra" },
   { name: "💎 LEGENDARY GPU", price: 0, tonReward: 20, gpuReward: 100, durationMs: 300000, requiredFriends: 150, tier: "legendary" }
 ];
+
+// ========== ОЧИСТКА ТАЙМЕРОВ (ЗАЩИТА ОТ ДВОЙНЫХ) ==========
+function clearAllMinings() {
+  for (let i = 0; i < miningIntervals.length; i++) {
+    if (miningIntervals[i]) {
+      clearInterval(miningIntervals[i]);
+      miningIntervals[i] = null;
+    }
+  }
+}
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 function updateUI() {
@@ -378,6 +388,12 @@ async function claimReferralReward(cardIndex) {
     tg.showAlert("⏳ Майнинг ещё не завершён");
     return;
   }
+  
+  if (miningIntervals[cardIndex]) {
+    clearInterval(miningIntervals[cardIndex]);
+    miningIntervals[cardIndex] = null;
+  }
+  
   playerData.ton += state.totalTon;
   playerData.gpuTokens += state.totalGpu;
   state.active = false;
@@ -498,6 +514,12 @@ async function buyGPU(idx) {
 async function claimGPU(idx) {
   const state = gpuStates[idx];
   if (state.earnedTon < state.totalTon - 0.01) { tg.showAlert("⏳ Майнинг ещё не завершён"); return; }
+  
+  if (miningIntervals[idx]) {
+    clearInterval(miningIntervals[idx]);
+    miningIntervals[idx] = null;
+  }
+  
   playerData.ton += state.totalTon;
   playerData.gpuTokens += state.totalGpu;
   state.active = false;
@@ -514,32 +536,54 @@ async function claimGPU(idx) {
 }
 
 function startMining(idx) {
-  if (miningIntervals[idx]) clearInterval(miningIntervals[idx]);
+  if (miningIntervals[idx]) {
+    clearInterval(miningIntervals[idx]);
+    miningIntervals[idx] = null;
+  }
+  
   const state = gpuStates[idx];
-  if (!state.active) return;
+  if (!state || !state.active) return;
+  
   miningIntervals[idx] = setInterval(() => {
-    const elapsed = Date.now() - state.startedAt;
-    const progress = Math.min(1, elapsed / state.durationMs);
-    state.earnedTon = state.totalTon * progress;
-    state.earnedGpu = state.totalGpu * progress;
+    if (!gpuStates[idx] || !gpuStates[idx].active) {
+      if (miningIntervals[idx]) {
+        clearInterval(miningIntervals[idx]);
+        miningIntervals[idx] = null;
+      }
+      return;
+    }
+    
+    const currentState = gpuStates[idx];
+    const elapsed = Date.now() - currentState.startedAt;
+    const progress = Math.min(1, elapsed / currentState.durationMs);
+    currentState.earnedTon = currentState.totalTon * progress;
+    currentState.earnedGpu = currentState.totalGpu * progress;
+    
     const fill = document.getElementById(`fill_${idx}`);
     const text = document.getElementById(`text_${idx}`);
     if (fill) fill.style.width = (progress * 100) + "%";
-    if (text) text.innerHTML = `${state.earnedTon.toFixed(2)}/${state.totalTon.toFixed(1)} TON`;
+    if (text) text.innerHTML = `${currentState.earnedTon.toFixed(2)}/${currentState.totalTon.toFixed(1)} TON`;
+    
     if (progress >= 1) {
       clearInterval(miningIntervals[idx]);
-      state.active = false;
-      state.earnedTon = state.totalTon;
-      state.earnedGpu = state.totalGpu;
+      miningIntervals[idx] = null;
+      currentState.active = false;
+      currentState.earnedTon = currentState.totalTon;
+      currentState.earnedGpu = currentState.totalGpu;
       renderCard(idx);
       saveGameState();
-      updateReferralCardsStatus();
+      if (typeof updateReferralCardsStatus === 'function') updateReferralCardsStatus();
     }
   }, 500);
 }
 
 function startAllMinings() {
-  for (let i = 0; i < gpuStates.length; i++) if (gpuStates[i]?.active) startMining(i);
+  clearAllMinings();
+  for (let i = 0; i < gpuStates.length; i++) {
+    if (gpuStates[i] && gpuStates[i].active) {
+      startMining(i);
+    }
+  }
 }
 
 function renderCard(idx) {
