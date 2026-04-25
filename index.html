@@ -191,6 +191,7 @@
 // ========== НАСТРОЙКИ ==========
 const API_URL = "https://tst-production-b90a.up.railway.app/api/tg";
 const GAME_URL = "https://tst-production-b90a.up.railway.app";
+const BOT_USERNAME = "Testgpuuubot";  // ← ИСПРАВЛЕНО!
 
 // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 let tg = window.Telegram.WebApp;
@@ -285,8 +286,7 @@ function renderFriendsList() {
 }
 
 function updateRefLink() {
-  // ПРЯМАЯ ССЫЛКА НА ИГРУ (без бота)
-  document.getElementById("refLink").innerText = `${GAME_URL}/?startapp=ref_${userId}`;
+  document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
 }
 
 // ========== РАБОТА С БЭКЕНДОМ ==========
@@ -410,7 +410,7 @@ async function createWithdraw(amount, wallet) {
       tg.showAlert(`⚠️ У вас уже есть ${result.pendingCount} ожидающих заявок. Дождитесь их обработки.`);
       return false;
     }
-    tg.showAlert("✅ Заявка на вывод создана! Администратор проверит её в ближайшее время.");
+    tg.showAlert("✅ Заявка на вывод создана!");
     document.getElementById("withdrawAmount").value = "";
     document.getElementById("withdrawWallet").value = "";
     await loadUserData();
@@ -656,7 +656,6 @@ async function init() {
   }
   
   let referrerId = null;
-  // Читаем параметр из URL (прямая ссылка)
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('startapp')) {
     let param = urlParams.get('startapp');
@@ -664,7 +663,6 @@ async function init() {
       referrerId = param.replace('ref_', '');
     }
   }
-  // Или из Telegram WebApp
   if (!referrerId && tg.initDataUnsafe?.start_param) {
     const startParam = tg.initDataUnsafe.start_param;
     if (startParam.startsWith('ref_')) {
