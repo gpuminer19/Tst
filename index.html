@@ -214,7 +214,7 @@
 
 <script>
 
-// ========== НАСТРОЙКИ ==========
+// ========== НАСТРОЙКИ (ОБНОВЛЕНЫ) ==========
 const API_URL = "https://tst-production-b90a.up.railway.app/api/tg";
 const GAME_URL = "https://gpuminer19.github.io/Tst";
 const BOT_USERNAME = "Testgpuuubot";
@@ -309,7 +309,34 @@ function updateRefLink() {
   document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
 }
 
-// ========== ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ БАЛАНСА ==========
+// ========== НОВАЯ ФУНКЦИЯ: ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ ПРИ ЛЮБОМ ДЕЙСТВИИ ==========
+async function refreshBalanceForAnyAction() {
+    const result = await apiRequest("register", {});
+    if (result && result.success) {
+        const hasChanged = playerData.ton !== result.data.ton;
+        
+        // Обновляем глобальные данные
+        playerData.ton = result.data.ton;
+        playerData.gpuTokens = result.data.gpu;
+        playerData.friends = result.data.friends;
+        if (result.data.invitedFriends) playerData.invitedFriends = result.data.invitedFriends;
+        if (result.data.transactions) playerData.transactions = result.data.transactions;
+        
+        // Всегда обновляем UI
+        updateUI();
+        renderFriendsList();
+        renderHistory();
+        
+        // Если изменились друзья, проверяем реферальные карты
+        if (hasChanged || result.data.friends !== playerData.friends) {
+            await checkAndActivateReferralCards();
+        }
+        
+        if (hasChanged) console.log(`🔄 Баланс синхронизирован: ${playerData.ton} TON`);
+    }
+}
+
+// ========== ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ БАЛАНСА ДЛЯ ОТДЕЛЬНЫХ ДЕЙСТВИЙ ==========
 async function syncBalance() {
   const result = await apiRequest("register", {});
   if (result && result.success) {
@@ -456,7 +483,6 @@ async function loadUserData(referrerId = null) {
     updateUI();
     renderFriendsList();
     renderHistory();
-    // НЕ вызываем renderAllCards() - карты уже отрисованы!
     startAllMinings();
     await checkAndActivateReferralCards();
     return true;
@@ -480,12 +506,18 @@ async function loadReferrals() {
 }
 
 async function createDeposit(amount) {
+  await refreshBalanceForAnyAction();
   const result = await apiRequest("createDeposit", { amount });
-  if (result?.success) showPayInfo(result.deposit);
-  else tg.showAlert("❌ Ошибка создания заявки");
+  if (result?.success) {
+    showPayInfo(result.deposit);
+    await refreshBalanceForAnyAction();
+  } else {
+    tg.showAlert("❌ Ошибка создания заявки");
+  }
 }
 
 async function createWithdraw(amount, wallet) {
+  await refreshBalanceForAnyAction();
   if (amount < 1) { tg.showAlert("❌ Минимальная сумма 1 TON"); return false; }
   if (!wallet || wallet.length < 10) { tg.showAlert("❌ Введите корректный кошелёк"); return false; }
   if (playerData.ton < amount) { tg.showAlert("❌ Недостаточно средств"); return false; }
@@ -494,7 +526,7 @@ async function createWithdraw(amount, wallet) {
     tg.showAlert("✅ Заявка на вывод создана!");
     document.getElementById("withdrawAmount").value = "";
     document.getElementById("withdrawWallet").value = "";
-    await loadUserData();
+    await refreshBalanceForAnyAction();
     return true;
   }
   return false;
@@ -506,7 +538,7 @@ function initGpuStates() {
 }
 
 async function buyGPU(idx) {
-  await syncBalance();
+  await refreshBalanceForAnyAction();
   
   const gpu = gpuTemplates[idx];
   const state = gpuStates[idx];
@@ -534,11 +566,11 @@ async function buyGPU(idx) {
   renderCard(idx);
   startMining(idx);
   await saveGameState();
-  await loadUserData();
+  await refreshBalanceForAnyAction();
 }
 
 async function claimGPU(idx) {
-  await syncBalance();
+  await refreshBalanceForAnyAction();
   
   const state = gpuStates[idx];
   if (state.earnedTon < state.totalTon - 0.01) {
@@ -563,7 +595,7 @@ async function claimGPU(idx) {
   updateUI();
   renderCard(idx);
   await saveGameState();
-  await loadUserData();
+  await refreshBalanceForAnyAction();
 }
 
 function startMining(idx) {
@@ -575,7 +607,6 @@ function startMining(idx) {
   const state = gpuStates[idx];
   if (!state || !state.active) return;
   
-  // Функция обновления прогресса (без перерисовки всей карты)
   const updateProgress = () => {
     if (!gpuStates[idx] || !gpuStates[idx].active) {
       if (miningIntervals[idx]) {
@@ -591,7 +622,6 @@ function startMining(idx) {
     currentState.earnedTon = currentState.totalTon * progress;
     currentState.earnedGpu = currentState.totalGpu * progress;
     
-    // Обновляем только DOM-элементы, не перерисовывая всю карту
     const fill = document.getElementById(`fill_${idx}`);
     const text = document.getElementById(`text_${idx}`);
     if (fill) fill.style.width = (progress * 100) + "%";
@@ -603,14 +633,14 @@ function startMining(idx) {
       currentState.active = false;
       currentState.earnedTon = currentState.totalTon;
       currentState.earnedGpu = currentState.totalGpu;
-      renderCard(idx); // перерисовываем только когда майнинг закончен
+      renderCard(idx);
       saveGameState();
       if (typeof updateReferralCardsStatus === 'function') updateReferralCardsStatus();
     }
   };
   
   updateProgress();
-  miningIntervals[idx] = setInterval(updateProgress, 1000); // обновление раз в секунду
+  miningIntervals[idx] = setInterval(updateProgress, 1000);
 }
 
 function startAllMinings() {
@@ -663,20 +693,27 @@ function showPayInfo(deposit) {
 
 function copyText(text) { navigator.clipboard.writeText(text); tg.showAlert("📋 Скопировано"); }
 
-// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ==========
-window.openTab = function(id, btn) {
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-  
-  if (id === "referral") {
-    loadReferrals();
-    updateRefLink();
-  }
-  if (id === "wallet") {
-    renderHistory();
-  }
+// ========== ОБНОВЛЕННАЯ ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ВКЛАДОК ==========
+window.openTab = async function(id, btn) {
+    // Сначала обновляем баланс, чтобы пользователь видел актуальные данные
+    await refreshBalanceForAnyAction();
+    
+    // Старый код переключения вкладок
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    
+    // Специфичные обновления для вкладок (теперь они не загружают баланс повторно)
+    if (id === "referral") {
+        await loadReferrals();
+        updateRefLink();
+    }
+    if (id === "wallet") {
+        renderHistory();
+    }
+    
+    console.log(`🔄 Данные обновлены при переходе на вкладку: ${id}`);
 };
 
 function keepAlive() { setInterval(async () => { try { await fetch(API_URL, { method: 'HEAD' }); } catch(e) {} }, 4 * 60 * 1000); }
