@@ -1,10 +1,11 @@
 import os
 import json
 import secrets
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from datetime import datetime
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from datetime import datetime, timedelta
 import sqlite3
 from contextlib import contextmanager
 
@@ -22,8 +23,21 @@ app.add_middleware(
 # --- База данных ---
 DATABASE = "game.db"
 
-# Пароль админки из переменных окружения Render (БЕЗОПАСНО!)
+# Пароль админки из переменных окружения Render
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change_me_immediately")
+
+# Простая сессия (в памяти, для одного админа)
+admin_session = {
+    "authenticated": False,
+    "expires_at": None
+}
+
+def is_admin_authenticated(request: Request):
+    """Проверяет, есть ли валидная сессия"""
+    session_token = request.cookies.get("admin_session")
+    if session_token and admin_session["authenticated"] and admin_session["expires_at"] > datetime.now():
+        return True
+    return False
 
 @contextmanager
 def get_db():
@@ -215,15 +229,218 @@ async def root():
 async def health():
     return {"status": "alive"}
 
-# ========== АДМИН-ПАНЕЛЬ (ПАРОЛЬ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ) ==========
+# ========== АДМИН-ПАНЕЛЬ С СЕССИЕЙ ==========
 
 @app.get("/admin")
 async def admin_panel(request: Request):
-    password = request.query_params.get("pass")
+    # Проверяем сессию
+    if is_admin_authenticated(request):
+        return await render_admin_dashboard(request)
     
-    if password != ADMIN_PASSWORD:
-        return {"error": "Unauthorized", "hint": "Use ?pass=ваш_пароль"}
+    # Показываем форму входа
+    return HTMLResponse(content="""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Admin Login</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: system-ui, -apple-system, sans-serif;
+                background: linear-gradient(135deg, #0B0E1A 0%, #1A1F35 100%);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                color: #fff;
+            }
+            .login-container {
+                background: rgba(12, 18, 32, 0.95);
+                backdrop-filter: blur(20px);
+                border-radius: 32px;
+                padding: 40px;
+                width: 90%;
+                max-width: 400px;
+                border: 1px solid rgba(0, 212, 255, 0.3);
+                box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            }
+            h1 {
+                text-align: center;
+                margin-bottom: 10px;
+                color: #00D4FF;
+                font-size: 28px;
+            }
+            .subtitle {
+                text-align: center;
+                color: #8EA3D4;
+                margin-bottom: 30px;
+                font-size: 14px;
+            }
+            input {
+                width: 100%;
+                padding: 14px 16px;
+                margin-bottom: 20px;
+                background: rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.3);
+                border-radius: 16px;
+                color: white;
+                font-size: 16px;
+                outline: none;
+                transition: all 0.3s;
+            }
+            input:focus {
+                border-color: #00D4FF;
+                box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+            }
+            button {
+                width: 100%;
+                padding: 14px;
+                background: linear-gradient(95deg, #00D4FF, #0066FF);
+                border: none;
+                border-radius: 16px;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+                transition: transform 0.2s;
+            }
+            button:hover {
+                transform: translateY(-2px);
+            }
+            button:active {
+                transform: translateY(0);
+            }
+            .error {
+                background: rgba(220, 38, 38, 0.2);
+                border: 1px solid #DC2626;
+                border-radius: 12px;
+                padding: 12px;
+                margin-bottom: 20px;
+                text-align: center;
+                color: #FF8A8A;
+                font-size: 14px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="login-container">
+            <h1>🔐 Admin Login</h1>
+            <div class="subtitle">Введите пароль для доступа к панели управления</div>
+            <form method="post" action="/admin/login">
+                <input type="password" name="password" placeholder="Введите пароль" autofocus>
+                <button type="submit">Войти</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """)
+
+@app.post("/admin/login")
+async def admin_login(request: Request):
+    form = await request.form()
+    password = form.get("password")
     
+    if password == ADMIN_PASSWORD:
+        # Устанавливаем сессию на 24 часа
+        admin_session["authenticated"] = True
+        admin_session["expires_at"] = datetime.now() + timedelta(hours=24)
+        
+        response = RedirectResponse(url="/admin", status_code=303)
+        response.set_cookie(
+            key="admin_session",
+            value=secrets.token_hex(32),
+            max_age=86400,  # 24 часа
+            httponly=True,
+            secure=True,
+            samesite="lax"
+        )
+        return response
+    
+    # Неверный пароль
+    return HTMLResponse(content="""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Admin Login</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: system-ui, -apple-system, sans-serif;
+                background: linear-gradient(135deg, #0B0E1A 0%, #1A1F35 100%);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                color: #fff;
+            }
+            .login-container {
+                background: rgba(12, 18, 32, 0.95);
+                backdrop-filter: blur(20px);
+                border-radius: 32px;
+                padding: 40px;
+                width: 90%;
+                max-width: 400px;
+                border: 1px solid rgba(0, 212, 255, 0.3);
+            }
+            h1 { text-align: center; margin-bottom: 10px; color: #00D4FF; }
+            .subtitle { text-align: center; color: #8EA3D4; margin-bottom: 30px; }
+            input {
+                width: 100%;
+                padding: 14px 16px;
+                margin-bottom: 20px;
+                background: rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.3);
+                border-radius: 16px;
+                color: white;
+                font-size: 16px;
+            }
+            button {
+                width: 100%;
+                padding: 14px;
+                background: linear-gradient(95deg, #00D4FF, #0066FF);
+                border: none;
+                border-radius: 16px;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+            }
+            .error {
+                background: rgba(220, 38, 38, 0.2);
+                border: 1px solid #DC2626;
+                border-radius: 12px;
+                padding: 12px;
+                margin-bottom: 20px;
+                text-align: center;
+                color: #FF8A8A;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="login-container">
+            <h1>🔐 Admin Login</h1>
+            <div class="subtitle">Неверный пароль</div>
+            <form method="post" action="/admin/login">
+                <input type="password" name="password" placeholder="Введите пароль">
+                <button type="submit">Попробовать снова</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """, status_code=401)
+
+@app.get("/admin/logout")
+async def admin_logout():
+    admin_session["authenticated"] = False
+    admin_session["expires_at"] = None
+    response = RedirectResponse(url="/admin", status_code=303)
+    response.delete_cookie("admin_session")
+    return response
+
+async def render_admin_dashboard(request: Request):
+    """Рендерит админ-панель (требует авторизации)"""
     with get_db() as conn:
         total_players = conn.execute("SELECT COUNT(*) as count FROM players").fetchone()["count"]
         total_deposits_pending = conn.execute("SELECT COUNT(*) as count FROM deposits WHERE status = 'pending'").fetchone()["count"]
@@ -247,7 +464,9 @@ async def admin_panel(request: Request):
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             body {{ font-family: system-ui, -apple-system, sans-serif; background: #0B0E1A; color: #fff; padding: 20px; }}
             .container {{ max-width: 1200px; margin: 0 auto; }}
-            h1 {{ margin-bottom: 20px; color: #00D4FF; }}
+            .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }}
+            h1 {{ color: #00D4FF; }}
+            .logout-btn {{ background: #DC2626; padding: 8px 16px; border-radius: 8px; text-decoration: none; color: white; }}
             .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 30px; }}
             .stat-card {{ background: rgba(255,255,255,0.1); border-radius: 16px; padding: 16px; backdrop-filter: blur(10px); }}
             .stat-value {{ font-size: 32px; font-weight: bold; color: #FFB347; }}
@@ -268,7 +487,10 @@ async def admin_panel(request: Request):
     </head>
     <body>
         <div class="container">
-            <h1>🎮 CryptoGPU Admin Panel</h1>
+            <div class="header">
+                <h1>🎮 CryptoGPU Admin Panel</h1>
+                <a href="/admin/logout" class="logout-btn">🚪 Выйти</a>
+            </div>
             
             <div class="stats">
                 <div class="stat-card"><div class="stat-value">{total_players}</div><div class="stat-label">👥 Всего игроков</div></div>
@@ -285,8 +507,7 @@ async def admin_panel(request: Request):
             <div id="deposits-tab">
                 <h3>⏳ Ожидают подтверждения</h3>
                 <table>
-                    <thead><tr><th>ID заявки</th><th>User ID</th><th>Сумма (TON)</th><th>Комментарий</th><th>Дата</th><th>Действия</th></tr>
-                    </thead>
+                    <thead><tr><th>ID заявки</th><th>User ID</th><th>Сумма (TON)</th><th>Комментарий</th><th>Дата</th><th>Действия</th></tr></thead>
                     <tbody>
     """
     
@@ -319,13 +540,13 @@ async def admin_panel(request: Request):
     
     for p in top_players:
         html += f"""
-            <tr>
-                <td>{p['user_id']}</td>
-                <td>{p['name']}</td>
-                <td>{p['ton']:.2f}</td>
-                <td>{p['gpu']}</td>
-                <td>{p['friends']}</td>
-            </tr>
+        <tr>
+            <td>{p['user_id']}</td>
+            <td>{p['name']}</td>
+            <td>{p['ton']:.2f}</td>
+            <td>{p['gpu']}</td>
+            <td>{p['friends']}</td>
+        </tr>
         """
     
     html += """
@@ -335,136 +556,4 @@ async def admin_panel(request: Request):
             
             <div id="search-tab" class="hidden">
                 <h3>🔍 Поиск игрока</h3>
-                <div class="search-box">
-                    <input type="text" id="searchUserId" placeholder="Введите User ID">
-                    <button onclick="searchPlayer()" style="background:#00D4FF; border:none; padding:10px 20px; border-radius:8px; margin-left:10px;">Найти</button>
-                </div>
-                <div id="searchResult"></div>
-            </div>
-        </div>
-        
-        <script>
-            function showTab(tab) {
-                document.getElementById('deposits-tab').classList.add('hidden');
-                document.getElementById('players-tab').classList.add('hidden');
-                document.getElementById('search-tab').classList.add('hidden');
-                document.getElementById(tab + '-tab').classList.remove('hidden');
-                
-                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-                event.target.classList.add('active');
-            }
-            
-            async function approveDeposit(depositId, amount, userId) {
-                if(!confirm(`Подтвердить пополнение ${amount} TON для пользователя ${userId}?`)) return;
-                const password = prompt('Введите пароль администратора');
-                if(!password) return;
-                const resp = await fetch(`/admin/approve_deposit?pass=${password}&deposit_id=${depositId}&user_id=${userId}&amount=${amount}`);
-                const data = await resp.json();
-                if(data.success) { alert('✅ Баланс пополнен!'); location.reload(); }
-                else { alert('❌ Ошибка: ' + (data.error || 'Неверный пароль')); }
-            }
-            
-            async function rejectDeposit(depositId) {
-                if(!confirm('Отклонить заявку?')) return;
-                const password = prompt('Введите пароль администратора');
-                if(!password) return;
-                const resp = await fetch(`/admin/reject_deposit?pass=${password}&deposit_id=${depositId}`);
-                const data = await resp.json();
-                if(data.success) { alert('✅ Заявка отклонена'); location.reload(); }
-                else { alert('❌ Ошибка: ' + (data.error || 'Неверный пароль')); }
-            }
-            
-            async function searchPlayer() {
-                const userId = document.getElementById('searchUserId').value;
-                if(!userId) return;
-                const password = prompt('Введите пароль администратора');
-                if(!password) return;
-                const resp = await fetch(`/admin/player?pass=${password}&user_id=${userId}`);
-                const data = await resp.json();
-                if(data.success) {
-                    document.getElementById('searchResult').innerHTML = `
-                        <div style="background:rgba(255,255,255,0.1); border-radius:16px; padding:16px; margin-top:16px;">
-                            <h4>📊 Данные игрока</h4>
-                            <p><strong>User ID:</strong> ${data.player.user_id}</p>
-                            <p><strong>Имя:</strong> ${data.player.name}</p>
-                            <p><strong>💰 TON:</strong> ${data.player.ton}</p>
-                            <p><strong>⚡ GPU:</strong> ${data.player.gpu}</p>
-                            <p><strong>👥 Друзей:</strong> ${data.player.friends}</p>
-                            <button onclick="giveBonus('${userId}')" style="background:#FFB347; border:none; padding:8px 16px; border-radius:8px;">🎁 Начислить бонус 10 TON</button>
-                        </div>
-                    `;
-                } else {
-                    document.getElementById('searchResult').innerHTML = '<p>❌ Игрок не найден</p>';
-                }
-            }
-            
-            async function giveBonus(userId) {
-                const amount = prompt('Сколько TON начислить?', '10');
-                if(!amount) return;
-                const password = prompt('Введите пароль администратора');
-                if(!password) return;
-                const resp = await fetch(`/admin/give_bonus?pass=${password}&user_id=${userId}&amount=${amount}`);
-                const data = await resp.json();
-                if(data.success) alert(`✅ Начислено ${amount} TON!`);
-                else alert('❌ Ошибка: ' + (data.error || 'Неверный пароль'));
-            }
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html, status_code=200)
-
-@app.get("/admin/approve_deposit")
-async def approve_deposit(deposit_id: str, user_id: str, amount: float, passw: str = ""):
-    if passw != ADMIN_PASSWORD:
-        return {"success": False, "error": "Unauthorized"}
-    
-    with get_db() as conn:
-        deposit = conn.execute("SELECT status FROM deposits WHERE id = ?", (deposit_id,)).fetchone()
-        if not deposit or deposit["status"] != "pending":
-            return {"success": False, "error": "Deposit not found or already processed"}
-        
-        conn.execute("UPDATE players SET ton = ton + ? WHERE user_id = ?", (amount, user_id))
-        conn.execute("UPDATE deposits SET status = 'approved' WHERE id = ?", (deposit_id,))
-    
-    return {"success": True}
-
-@app.get("/admin/reject_deposit")
-async def reject_deposit(deposit_id: str, passw: str = ""):
-    if passw != ADMIN_PASSWORD:
-        return {"success": False, "error": "Unauthorized"}
-    
-    with get_db() as conn:
-        conn.execute("UPDATE deposits SET status = 'rejected' WHERE id = ?", (deposit_id,))
-    
-    return {"success": True}
-
-@app.get("/admin/player")
-async def get_player(user_id: str, passw: str = ""):
-    if passw != ADMIN_PASSWORD:
-        return {"success": False, "error": "Unauthorized"}
-    
-    with get_db() as conn:
-        player = conn.execute(
-            "SELECT user_id, name, ton, gpu, friends FROM players WHERE user_id = ?",
-            (user_id,)
-        ).fetchone()
-    
-    if player:
-        return {"success": True, "player": dict(player)}
-    return {"success": False}
-
-@app.get("/admin/give_bonus")
-async def give_bonus(user_id: str, amount: float, passw: str = ""):
-    if passw != ADMIN_PASSWORD:
-        return {"success": False, "error": "Unauthorized"}
-    
-    with get_db() as conn:
-        conn.execute("UPDATE players SET ton = ton + ? WHERE user_id = ?", (amount, user_id))
-    
-    return {"success": True}
-
-# ========== ЗАПУСК ==========
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+         
