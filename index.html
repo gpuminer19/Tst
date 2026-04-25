@@ -24,6 +24,7 @@
   .balance-value span { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, #FFF, #A0C4FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .currency-icon { width: 22px; height: 22px; }
   .gpu-currency { background: linear-gradient(135deg, #FFB347, #FF8C00); border-radius: 30px; padding: 2px 6px; font-size: 9px; font-weight: bold; color: #1A1F2E; }
+  .refresh-btn { background: #FF8C00; padding: 5px 12px; border-radius: 20px; font-size: 12px; margin-left: 10px; width: auto; display: inline-flex; }
   .grid { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
   .card { background: rgba(12, 18, 32, 0.75); backdrop-filter: blur(12px); border-radius: 24px; padding: 12px; display: flex; gap: 12px; align-items: center; border: 1px solid rgba(0, 212, 255, 0.2); }
   .gpu-img { width: 65px; height: 65px; object-fit: contain; background: rgba(0, 0, 0, 0.4); border-radius: 18px; padding: 8px; }
@@ -80,6 +81,7 @@
       <p id="userStatus">Telegram ID: ---</p>
     </div>
     <div class="user-id" id="userIdShort">---</div>
+    <button class="refresh-btn" onclick="manualRefresh()">🔄</button>
   </div>
 
   <div class="balance-container">
@@ -213,7 +215,14 @@ function renderFriendsList() {
     </div>`).join('');
 }
 
-// ========== РАБОТА С БЭКЕНДОМ ==========
+// Ручное обновление баланса
+window.manualRefresh = async function() {
+  tg.showAlert("🔄 Обновление баланса...");
+  await loadUserData();
+  tg.showAlert("✅ Баланс обновлён!");
+};
+
+// ========== РАБОТА С БЭКЕНДОМ (С АВТО-СИНХРОНИЗАЦИЕЙ) ==========
 async function apiRequest(action, additionalData = {}) {
   try {
     const response = await fetch(API_URL, {
@@ -226,7 +235,26 @@ async function apiRequest(action, additionalData = {}) {
         ...additionalData
       })
     });
-    return await response.json();
+    const result = await response.json();
+    
+    // АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ ДАННЫХ ПОСЛЕ КАЖДОГО ЗАПРОСА
+    if (result && result.success) {
+      if (result.data) {
+        // Для register и save
+        playerData.ton = result.data.ton;
+        playerData.gpuTokens = result.data.gpu;
+        playerData.friends = result.data.friends;
+        if (result.data.invitedFriends) playerData.invitedFriends = result.data.invitedFriends;
+        updateUI();
+        renderFriendsList();
+      } else if (result.balance !== undefined) {
+        // Для других запросов, где возвращается только баланс
+        playerData.ton = result.balance;
+        updateUI();
+      }
+    }
+    
+    return result;
   } catch (error) {
     console.error(`API Error (${action}):`, error);
     tg.showAlert("❌ Ошибка связи с сервером");
@@ -237,7 +265,7 @@ async function apiRequest(action, additionalData = {}) {
 // Загрузка данных пользователя
 async function loadUserData(referrerId = null) {
   const result = await apiRequest("register", { referrer_id: referrerId });
-  if (result && result.success) {
+  if (result && result.success && result.data) {
     playerData = {
       ton: result.data.ton,
       gpuTokens: result.data.gpu,
@@ -334,6 +362,9 @@ async function buyGPU(idx) {
   renderCard(idx);
   startMining(idx);
   await saveGameState();
+  
+  // Дополнительная синхронизация с сервером
+  await loadUserData();
 }
 
 async function claimGPU(idx) {
@@ -359,6 +390,9 @@ async function claimGPU(idx) {
   updateUI();
   renderCard(idx);
   await saveGameState();
+  
+  // Дополнительная синхронизация с сервером
+  await loadUserData();
 }
 
 function startMining(idx) {
@@ -478,16 +512,14 @@ async function startRefMining() {
   const rewards = getRefRewards();
   if (rewards.ton === 0) return;
   
-  // Отправляем запрос на старт реферального майнинга
   const result = await apiRequest("startRefMining", { rewards });
   if (result && result.success) {
     tg.showAlert(`🎉 Майнинг начат! Через несколько секунд вы получите ${rewards.ton} TON и ${rewards.gpu} GPU`);
-    // Обновляем данные после майнинга
     setTimeout(() => loadUserData(), 5000);
   }
 }
 
-// ========== АДМИН-ПАНЕЛЬ В ИГРЕ (опционально) ==========
+// ========== АДМИН-ПАНЕЛЬ В ИГРЕ ==========
 function showPayInfo(deposit) {
   const html = `
     <div class="pay-info">
@@ -530,6 +562,16 @@ window.openTab = function(id, btn) {
   }
 };
 
+// ========== ЗАЩИТА ОТ ЗАСЫПАНИЯ ==========
+function keepAlive() {
+  setInterval(async () => {
+    try {
+      await fetch(API_URL, { method: 'HEAD' });
+      console.log("🔄 Keep-alive ping sent");
+    } catch(e) {}
+  }, 4 * 60 * 1000); // Каждые 4 минуты
+}
+
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
   // Настраиваем Telegram
@@ -565,6 +607,15 @@ async function init() {
     updateRefLink();
     await loadReferrals();
   }
+  
+  // Запускаем пинг для предотвращения засыпания
+  keepAlive();
+  
+  // Синхронизация баланса каждые 15 секунд
+  setInterval(async () => {
+    await loadUserData();
+    console.log("🔄 Auto-sync with server");
+  }, 15000);
   
   // Скрываем загрузку, показываем игру
   document.getElementById("loading").style.display = "none";
