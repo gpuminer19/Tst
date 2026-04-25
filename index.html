@@ -24,7 +24,6 @@
   .balance-value span { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, #FFF, #A0C4FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .currency-icon { width: 22px; height: 22px; }
   .gpu-currency { background: linear-gradient(135deg, #FFB347, #FF8C00); border-radius: 30px; padding: 2px 6px; font-size: 9px; font-weight: bold; color: #1A1F2E; }
-  .refresh-btn { background: #FF8C00; padding: 5px 12px; border-radius: 20px; font-size: 12px; margin-left: 10px; width: auto; display: inline-flex; }
   .grid { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
   .card { background: rgba(12, 18, 32, 0.75); backdrop-filter: blur(12px); border-radius: 24px; padding: 12px; display: flex; gap: 12px; align-items: center; border: 1px solid rgba(0, 212, 255, 0.2); }
   .gpu-img { width: 65px; height: 65px; object-fit: contain; background: rgba(0, 0, 0, 0.4); border-radius: 18px; padding: 8px; }
@@ -59,15 +58,18 @@
   .deposit-box { margin: 16px; padding: 18px; border-radius: 24px; background: linear-gradient(135deg, #1A1F35, #11152A); border: 1px solid rgba(0, 212, 255, 0.3); }
   .deposit-box h3 { margin-bottom: 12px; font-size: 16px; }
   .deposit-box label { display: block; font-size: 11px; color: #8EA3D4; margin-bottom: 6px; }
-  .deposit-box input { width: 100%; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 12px; padding: 12px; font-size: 16px; outline: none; }
-  .deposit-box input:focus { border-color: #00D4FF; }
-  .deposit-box .pay-btn { margin-top: 12px; background: linear-gradient(95deg, #00D4FF, #0066FF); color: #0B0E1A; }
+  .deposit-box input, .deposit-box textarea { width: 100%; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 12px; padding: 12px; font-size: 14px; outline: none; margin-bottom: 10px; }
+  .deposit-box textarea { resize: none; font-family: monospace; }
+  .deposit-box input:focus, .deposit-box textarea:focus { border-color: #00D4FF; }
+  .deposit-box .pay-btn { margin-top: 5px; background: linear-gradient(95deg, #00D4FF, #0066FF); color: #0B0E1A; }
+  .withdraw-btn { background: linear-gradient(95deg, #FF8C00, #FF6600); }
   .pay-info { background: rgba(0,0,0,0.4); border-radius: 14px; padding: 12px; margin-top: 14px; font-size: 12px; word-break: break-all; }
   .pay-info .row { margin-bottom: 8px; }
   .pay-info .lbl { color: #8EA3D4; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
   .pay-info .val { font-family: monospace; color: #FFD699; background: rgba(0,0,0,0.4); padding: 6px 10px; border-radius: 8px; display: inline-block; max-width: 100%; word-break: break-all; }
   .pay-info .copy-mini { background: #FF8C00; padding: 4px 10px; font-size: 11px; width: auto; margin-left: 6px; display: inline-flex; }
   .pay-warn { background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.4); border-radius: 12px; padding: 10px; margin-top: 10px; font-size: 11px; color: #FFD699; }
+  hr { margin: 20px 0; border-color: rgba(0,212,255,0.2); }
 </style>
 </head>
 <body>
@@ -81,7 +83,6 @@
       <p id="userStatus">Telegram ID: ---</p>
     </div>
     <div class="user-id" id="userIdShort">---</div>
-    <button class="refresh-btn" onclick="manualRefresh()">🔄</button>
   </div>
 
   <div class="balance-container">
@@ -142,6 +143,16 @@
     <input id="depositAmount" type="number" min="0.1" step="0.1" placeholder="Например, 5">
     <button class="pay-btn" id="payBtn">💎 Оплатить</button>
     <div id="payResult"></div>
+    
+    <hr>
+    
+    <h3>📤 Вывод TON</h3>
+    <label>Сумма вывода (TON)</label>
+    <input id="withdrawAmount" type="number" min="1" step="0.5" placeholder="Минимум 1 TON">
+    <label>TON-кошелёк для вывода</label>
+    <textarea id="withdrawWallet" rows="2" placeholder="Введите ваш TON-кошелёк (например, EQD..."></textarea>
+    <button class="pay-btn withdraw-btn" id="withdrawBtn">💸 Запросить вывод</button>
+    <div id="withdrawResult"></div>
   </div>
 </div>
 
@@ -215,14 +226,7 @@ function renderFriendsList() {
     </div>`).join('');
 }
 
-// Ручное обновление баланса
-window.manualRefresh = async function() {
-  tg.showAlert("🔄 Обновление баланса...");
-  await loadUserData();
-  tg.showAlert("✅ Баланс обновлён!");
-};
-
-// ========== РАБОТА С БЭКЕНДОМ (С АВТО-СИНХРОНИЗАЦИЕЙ) ==========
+// ========== РАБОТА С БЭКЕНДОМ ==========
 async function apiRequest(action, additionalData = {}) {
   try {
     const response = await fetch(API_URL, {
@@ -237,10 +241,15 @@ async function apiRequest(action, additionalData = {}) {
     });
     const result = await response.json();
     
-    // АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ ДАННЫХ ПОСЛЕ КАЖДОГО ЗАПРОСА
+    // Проверка на бан
+    if (result.error === 'BANNED') {
+      tg.showAlert(result.message || "❌ Ваш аккаунт заблокирован");
+      return null;
+    }
+    
+    // Автоматическое обновление данных после каждого запроса
     if (result && result.success) {
       if (result.data) {
-        // Для register и save
         playerData.ton = result.data.ton;
         playerData.gpuTokens = result.data.gpu;
         playerData.friends = result.data.friends;
@@ -248,7 +257,6 @@ async function apiRequest(action, additionalData = {}) {
         updateUI();
         renderFriendsList();
       } else if (result.balance !== undefined) {
-        // Для других запросов, где возвращается только баланс
         playerData.ton = result.balance;
         updateUI();
       }
@@ -273,7 +281,6 @@ async function loadUserData(referrerId = null) {
       invitedFriends: result.data.invitedFriends || []
     };
     
-    // Восстанавливаем состояние видеокарт
     if (result.data.state && result.data.state.gpuStates) {
       gpuStates = result.data.state.gpuStates;
     } else {
@@ -289,7 +296,6 @@ async function loadUserData(referrerId = null) {
   return false;
 }
 
-// Сохранение состояния видеокарт
 async function saveGameState() {
   await apiRequest("save", {
     ton: playerData.ton,
@@ -299,7 +305,6 @@ async function saveGameState() {
   });
 }
 
-// Загрузка рефералов
 async function loadReferrals() {
   const result = await apiRequest("getReferrals");
   if (result && result.success && result.referrals) {
@@ -310,13 +315,33 @@ async function loadReferrals() {
   }
 }
 
-// Создание заявки на пополнение
 async function createDeposit(amount) {
   const result = await apiRequest("createDeposit", { amount: amount });
   if (result && result.success) {
     showPayInfo(result.deposit);
   } else {
     tg.showAlert("❌ Ошибка создания заявки");
+  }
+}
+
+async function createWithdraw(amount, wallet) {
+  if (amount < 1) {
+    tg.showAlert("❌ Минимальная сумма вывода 1 TON");
+    return false;
+  }
+  if (!wallet || wallet.length < 10) {
+    tg.showAlert("❌ Введите корректный TON-кошелёк");
+    return false;
+  }
+  const result = await apiRequest("createWithdraw", { amount: amount, tonWallet: wallet });
+  if (result && result.success) {
+    tg.showAlert("✅ Заявка на вывод создана! Администратор проверит её в ближайшее время.");
+    document.getElementById("withdrawAmount").value = "";
+    document.getElementById("withdrawWallet").value = "";
+    return true;
+  } else {
+    tg.showAlert("❌ Ошибка создания заявки: " + (result?.error || "Недостаточно средств"));
+    return false;
   }
 }
 
@@ -346,10 +371,8 @@ async function buyGPU(idx) {
     return;
   }
   
-  // Списываем средства
   playerData.ton -= gpu.price;
   
-  // Активируем майнинг
   state.active = true;
   state.totalTon = gpu.tonReward;
   state.totalGpu = gpu.gpuReward;
@@ -362,8 +385,6 @@ async function buyGPU(idx) {
   renderCard(idx);
   startMining(idx);
   await saveGameState();
-  
-  // Дополнительная синхронизация с сервером
   await loadUserData();
 }
 
@@ -374,11 +395,9 @@ async function claimGPU(idx) {
     return;
   }
   
-  // Начисляем награду
   playerData.ton += state.totalTon;
   playerData.gpuTokens += state.totalGpu;
   
-  // Сбрасываем карту
   state.active = false;
   state.totalTon = 0;
   state.totalGpu = 0;
@@ -390,13 +409,10 @@ async function claimGPU(idx) {
   updateUI();
   renderCard(idx);
   await saveGameState();
-  
-  // Дополнительная синхронизация с сервером
   await loadUserData();
 }
 
 function startMining(idx) {
-  // Очищаем предыдущий интервал
   if (miningIntervals[idx]) clearInterval(miningIntervals[idx]);
   
   const state = gpuStates[idx];
@@ -408,13 +424,11 @@ function startMining(idx) {
     state.earnedTon = state.totalTon * progress;
     state.earnedGpu = state.totalGpu * progress;
     
-    // Обновляем прогресс-бар
     const fill = document.getElementById(`fill_${idx}`);
     const text = document.getElementById(`text_${idx}`);
     if (fill) fill.style.width = (progress * 100) + "%";
     if (text) text.innerHTML = `${state.earnedTon.toFixed(2)}/${state.totalTon.toFixed(1)} TON`;
     
-    // Если майнинг завершён
     if (progress >= 1) {
       clearInterval(miningIntervals[idx]);
       state.active = false;
@@ -434,7 +448,6 @@ function startAllMinings() {
   }
 }
 
-// ========== ОТРИСОВКА КАРТОЧЕК ==========
 function renderCard(idx) {
   const card = document.getElementById(`card_${idx}`);
   if (!card) return;
@@ -443,7 +456,6 @@ function renderCard(idx) {
   const state = gpuStates[idx];
   
   if (state.active) {
-    // Активный майнинг
     const progress = (Date.now() - state.startedAt) / state.durationMs;
     const percent = Math.min(100, progress * 100);
     card.innerHTML = `
@@ -457,7 +469,6 @@ function renderCard(idx) {
       </div>
     `;
   } else if (state.totalTon > 0 && state.earnedTon >= state.totalTon - 0.01) {
-    // Готово к получению
     card.innerHTML = `
       <img src="8.png" class="gpu-img">
       <div class="card-info">
@@ -468,7 +479,6 @@ function renderCard(idx) {
     const claimBtn = card.querySelector('.claim-gpu');
     if (claimBtn) claimBtn.onclick = () => claimGPU(idx);
   } else {
-    // Доступна для покупки
     card.innerHTML = `
       <img src="8.png" class="gpu-img">
       <div class="card-info">
@@ -519,7 +529,6 @@ async function startRefMining() {
   }
 }
 
-// ========== АДМИН-ПАНЕЛЬ В ИГРЕ ==========
 function showPayInfo(deposit) {
   const html = `
     <div class="pay-info">
@@ -550,7 +559,6 @@ function copyText(text) {
   tg.showAlert("📋 Скопировано");
 }
 
-// ========== НАВИГАЦИЯ ==========
 window.openTab = function(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
@@ -569,16 +577,14 @@ function keepAlive() {
       await fetch(API_URL, { method: 'HEAD' });
       console.log("🔄 Keep-alive ping sent");
     } catch(e) {}
-  }, 4 * 60 * 1000); // Каждые 4 минуты
+  }, 4 * 60 * 1000);
 }
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
-  // Настраиваем Telegram
   tg.ready();
   tg.expand();
   
-  // Отображаем информацию о пользователе
   if (user) {
     document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
     if (user.username) document.getElementById("userStatus").innerHTML = `@${user.username}`;
@@ -590,7 +596,6 @@ async function init() {
     document.getElementById("userIdShort").innerText = `#${userId.slice(-5)}`;
   }
   
-  // Получаем реферальный ID из start_param
   let referrerId = null;
   if (tg.initDataUnsafe?.start_param) {
     const startParam = tg.initDataUnsafe.start_param;
@@ -599,25 +604,19 @@ async function init() {
     }
   }
   
-  // Загружаем данные с сервера
   initGpuStates();
   initGrid();
-  const loaded = await loadUserData(referrerId);
-  if (loaded) {
-    updateRefLink();
-    await loadReferrals();
-  }
+  await loadUserData(referrerId);
+  updateRefLink();
+  await loadReferrals();
   
-  // Запускаем пинг для предотвращения засыпания
   keepAlive();
   
-  // Синхронизация баланса каждые 15 секунд
   setInterval(async () => {
     await loadUserData();
     console.log("🔄 Auto-sync with server");
   }, 15000);
   
-  // Скрываем загрузку, показываем игру
   document.getElementById("loading").style.display = "none";
   document.getElementById("app").style.display = "block";
   
@@ -625,7 +624,7 @@ async function init() {
   tg.BackButton.hide();
 }
 
-// Обработчик кнопки пополнения
+// Обработчики кнопок
 document.getElementById("payBtn").onclick = () => {
   const amount = parseFloat(document.getElementById("depositAmount").value);
   if (isNaN(amount) || amount <= 0) {
@@ -635,14 +634,26 @@ document.getElementById("payBtn").onclick = () => {
   createDeposit(amount);
 };
 
-// Обработчик копирования реферальной ссылки
+document.getElementById("withdrawBtn").onclick = () => {
+  const amount = parseFloat(document.getElementById("withdrawAmount").value);
+  const wallet = document.getElementById("withdrawWallet").value.trim();
+  if (isNaN(amount) || amount <= 0) {
+    tg.showAlert("❌ Введите корректную сумму вывода");
+    return;
+  }
+  if (!wallet) {
+    tg.showAlert("❌ Введите TON-кошелёк для вывода");
+    return;
+  }
+  createWithdraw(amount, wallet);
+};
+
 document.getElementById("copyRefBtn").onclick = () => {
   const link = document.getElementById("refLink").innerText;
   navigator.clipboard.writeText(link);
   tg.showAlert("📋 Реферальная ссылка скопирована!");
 };
 
-// Запуск
 init();
 
 </script>
