@@ -72,7 +72,6 @@
   .pay-warn { background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.4); border-radius: 12px; padding: 10px; margin-top: 10px; font-size: 11px; color: #FFD699; }
   hr { margin: 20px 0; border-color: rgba(0,212,255,0.2); }
   
-  /* История транзакций */
   .history-list { max-height: 400px; overflow-y: auto; }
   .history-item { background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
   .history-info { flex: 1; }
@@ -190,15 +189,14 @@
 <script>
 
 // ========== НАСТРОЙКИ ==========
-const API_URL = "https://tst-production-b90a.up.railway.app/api/tg"; // ЗАМЕНИТЕ НА ВАШ URL
-const BOT_USERNAME = "Gputonminer_bot";
+const API_URL = "https://tst-production-b90a.up.railway.app/api/tg";
+const GAME_URL = "https://tst-production-b90a.up.railway.app";
 
 // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 let tg = window.Telegram.WebApp;
 let user = tg.initDataUnsafe?.user;
 let userId = user?.id || "test_" + Math.floor(Math.random() * 10000);
 
-// Данные игрока
 let playerData = {
   ton: 0,
   gpuTokens: 0,
@@ -267,6 +265,28 @@ function renderHistory() {
       </div>
     `;
   }).join('');
+}
+
+function renderFriendsList() {
+  const container = document.getElementById("friendsList");
+  if (!container) return;
+  if (!playerData.invitedFriends || playerData.invitedFriends.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding:10px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>';
+    return;
+  }
+  container.innerHTML = playerData.invitedFriends.map(f => `
+    <div class="friend-item">
+      <div class="friend-avatar">👤</div>
+      <div class="friend-info">
+        <div class="friend-name">${f.friend_name || f.name}</div>
+        <div class="friend-date">Присоединился: ${f.date || "недавно"}</div>
+      </div>
+    </div>`).join('');
+}
+
+function updateRefLink() {
+  // ПРЯМАЯ ССЫЛКА НА ИГРУ (без бота)
+  document.getElementById("refLink").innerText = `${GAME_URL}/?startapp=ref_${userId}`;
 }
 
 // ========== РАБОТА С БЭКЕНДОМ ==========
@@ -364,7 +384,7 @@ async function createDeposit(amount) {
       return;
     }
     showPayInfo(result.deposit);
-    await loadUserData(); // Обновляем историю
+    await loadUserData();
   } else {
     tg.showAlert("❌ Ошибка создания заявки: " + (result?.error || "Неизвестная ошибка"));
   }
@@ -393,7 +413,7 @@ async function createWithdraw(amount, wallet) {
     tg.showAlert("✅ Заявка на вывод создана! Администратор проверит её в ближайшее время.");
     document.getElementById("withdrawAmount").value = "";
     document.getElementById("withdrawWallet").value = "";
-    await loadUserData(); // Обновляем баланс и историю
+    await loadUserData();
     return true;
   } else {
     tg.showAlert("❌ Ошибка создания заявки: " + (result?.error || "Недостаточно средств"));
@@ -567,27 +587,6 @@ function initGrid() {
   }
 }
 
-function renderFriendsList() {
-  const container = document.getElementById("friendsList");
-  if (!container) return;
-  if (!playerData.invitedFriends || playerData.invitedFriends.length === 0) {
-    container.innerHTML = '<div style="text-align:center; padding:10px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>';
-    return;
-  }
-  container.innerHTML = playerData.invitedFriends.map(f => `
-    <div class="friend-item">
-      <div class="friend-avatar">👤</div>
-      <div class="friend-info">
-        <div class="friend-name">${f.friend_name || f.name}</div>
-        <div class="friend-date">Присоединился: ${f.date || "недавно"}</div>
-      </div>
-    </div>`).join('');
-}
-
-function updateRefLink() {
-  document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
-}
-
 function showPayInfo(deposit) {
   const html = `
     <div class="pay-info">
@@ -657,7 +656,16 @@ async function init() {
   }
   
   let referrerId = null;
-  if (tg.initDataUnsafe?.start_param) {
+  // Читаем параметр из URL (прямая ссылка)
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('startapp')) {
+    let param = urlParams.get('startapp');
+    if (param.startsWith('ref_')) {
+      referrerId = param.replace('ref_', '');
+    }
+  }
+  // Или из Telegram WebApp
+  if (!referrerId && tg.initDataUnsafe?.start_param) {
     const startParam = tg.initDataUnsafe.start_param;
     if (startParam.startsWith('ref_')) {
       referrerId = startParam.replace('ref_', '');
@@ -675,7 +683,7 @@ async function init() {
   setInterval(async () => {
     await loadUserData();
     console.log("🔄 Auto-sync with server");
-  }, 15000);
+  }, 30000);
   
   document.getElementById("loading").style.display = "none";
   document.getElementById("app").style.display = "block";
@@ -684,7 +692,6 @@ async function init() {
   tg.BackButton.hide();
 }
 
-// ========== ОБРАБОТЧИКИ ==========
 document.getElementById("payBtn").onclick = () => {
   const amount = parseFloat(document.getElementById("depositAmount").value);
   if (isNaN(amount) || amount <= 0) {
