@@ -1,6 +1,6 @@
 Flask
 Flask-SQLAlchemy
-Flask-Admin
+Flask-Admin>=1.6.0
 pyTelegramBotAPI
-psycopg2-binary
 gunicorn
+psycopg2-binary
