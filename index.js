@@ -420,7 +420,7 @@ app.get('/admin', requireAuth, async (req, res) => {
     <div id="balanceModal" class="modal"><div class="modal-content"><h3>💰 Изменить баланс TON</h3><input type="number" id="newBalance" step="0.01"><input type="text" id="balanceReason" placeholder="Причина изменения"><button onclick="submitBalanceChange()">Сохранить</button><button onclick="closeModal('balanceModal')" style="margin-top:8px; background:#DC2626;">Отмена</button></div></div>
     <div id="banModal" class="modal"><div class="modal-content"><h3>🔒 Забанить пользователя</h3><input type="text" id="banReason" placeholder="Причина бана"><button onclick="submitBan()">Забанить</button><button onclick="closeModal('banModal')" style="margin-top:8px;">Отмена</button></div></div>
     
-   <script>
+    <script>
       let currentUserId = null;
       
       function showTab(tab) {
@@ -528,3 +528,110 @@ app.get('/admin', requireAuth, async (req, res) => {
     </script>
     </body>
     </html>
+  `);
+});
+
+// API для админ-панели
+app.get('/admin/api/referrals/:userId', requireAuth, async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  res.json({ referrals: user?.invitedFriends || [] });
+});
+
+app.post('/admin/api/balance', requireAuth, async (req, res) => {
+  const { userId, newBalance, reason } = req.body;
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false, error: 'User not found' });
+  user.ton = newBalance;
+  await user.save();
+  console.log(`💰 Admin ${req.admin.username} changed balance of ${userId}: ${newBalance} TON (${reason})`);
+  res.json({ success: true });
+});
+
+app.post('/admin/api/ban', requireAuth, async (req, res) => {
+  const { userId, reason } = req.body;
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false });
+  user.isBanned = true;
+  user.banReason = reason;
+  await user.save();
+  console.log(`🔒 Admin ${req.admin.username} banned ${userId}: ${reason}`);
+  res.json({ success: true });
+});
+
+app.post('/admin/api/unban', requireAuth, async (req, res) => {
+  const { userId } = req.body;
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false });
+  user.isBanned = false;
+  user.banReason = null;
+  await user.save();
+  console.log(`🔓 Admin ${req.admin.username} unbanned ${userId}`);
+  res.json({ success: true });
+});
+
+// Обработка заявок
+app.post('/admin/approve', requireAuth, async (req, res) => {
+  const { id, type } = req.body;
+  const transaction = await Deposit.findById(id);
+  if (!transaction || transaction.status !== 'pending') {
+    return res.redirect('/admin?error=Invalid transaction');
+  }
+  
+  const user = await User.findOne({ userId: transaction.userId });
+  if (!user) return res.redirect('/admin?error=User not found');
+  
+  if (type === 'deposit') {
+    user.ton += transaction.amount;
+    user.totalDeposited += transaction.amount;
+    transaction.status = 'completed';
+  } else if (type === 'withdraw') {
+    if (user.ton >= transaction.amount) {
+      user.ton -= transaction.amount;
+      user.totalWithdrawn += transaction.amount;
+      transaction.status = 'completed';
+    } else {
+      transaction.status = 'cancelled';
+      return res.redirect('/admin?error=Insufficient balance');
+    }
+  }
+  
+  transaction.processedAt = new Date();
+  transaction.processedBy = req.admin.username;
+  await user.save();
+  await transaction.save();
+  
+  res.redirect('/admin');
+});
+
+app.post('/admin/reject', requireAuth, async (req, res) => {
+  const { id } = req.body;
+  await Deposit.findByIdAndUpdate(id, { status: 'cancelled', processedBy: req.admin.username });
+  res.redirect('/admin');
+});
+
+app.get('/admin/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/admin/login');
+});
+
+// Корневой маршрут
+app.get('/', (req, res) => {
+  res.json({ status: 'OK', message: 'CryptoGPU Backend is running' });
+});
+
+// Запуск сервера
+const PORT = process.env.PORT || 3000;
+
+mongoose.connect(process.env.MONGODB_URL)
+  .then(async () => {
+    console.log('✅ Connected to MongoDB');
+    await ensureAdminExists();
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🔐 Admin panel: https://your-domain.up.railway.app/admin`);
+    });
+  })
+  .catch(err => {
+    console.error('❌ MongoDB error:', err.message);
+    process.exit(1);
+  });
