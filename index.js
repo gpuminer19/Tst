@@ -288,6 +288,49 @@ app.post('/admin/reject', requireAuth, async (req, res) => {
 app.get('/admin/logout', (req, res) => { req.session.destroy(); res.redirect('/admin/login'); });
 app.get('/', (req, res) => { res.json({ status: 'OK', message: 'CryptoGPU Backend is running' }); });
 
+// ========== API ДЛЯ БОТА (засчёт реферала) ==========
+app.post('/api/bot/registerRef', async (req, res) => {
+  const { userId, referrerId } = req.body;
+  
+  try {
+    // Проверяем, не зарегистрирован ли уже этот пользователь
+    const existingUser = await User.findOne({ userId: userId });
+    if (existingUser) {
+      // Если пользователь уже есть, реферал всё равно засчитываем? 
+      // Решайте сами: я сделаю "нет"
+      return res.json({ success: false, error: 'User already exists' });
+    }
+    
+    // Находим реферера (того, кто пригласил)
+    const referrer = await User.findOne({ userId: referrerId });
+    if (!referrer) {
+      return res.json({ success: false, error: 'Referrer not found' });
+    }
+    
+    // Проверяем, не приглашал ли он уже этого пользователя
+    const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === userId);
+    if (alreadyInvited) {
+      return res.json({ success: false, error: 'Already invited' });
+    }
+    
+    // Добавляем друга к рефереру
+    referrer.invitedFriends.push({
+      friendId: userId,
+      friendName: `User_${userId.slice(-5)}`,
+      date: new Date().toLocaleDateString()
+    });
+    referrer.friends = referrer.invitedFriends.length;
+    await referrer.save();
+    
+    console.log(`✅ Реферал засчитан! ${referrerId} → ${userId}`);
+    res.json({ success: true, message: 'Referral counted' });
+    
+  } catch (error) {
+    console.error('Error in /api/bot/registerRef:', error);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 mongoose.connect(process.env.MONGODB_URL).then(async () => {
   console.log('✅ Connected to MongoDB');
