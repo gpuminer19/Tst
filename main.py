@@ -597,13 +597,3 @@ async def webhook_telegram(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
-```
-
-Обновите также requirements.txt:
-
-```txt
-fastapi==0.110.0
-uvicorn[standard]==0.27.1
-python-multipart==0.0.9
-httpx==0.27.0
-```
