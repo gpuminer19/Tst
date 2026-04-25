@@ -3,15 +3,13 @@ import json
 import secrets
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
 import sqlite3
 from contextlib import contextmanager
 
 app = FastAPI()
 
-# Разрешаем запросы от любых источников (для Telegram WebApp)
+# Разрешаем запросы от Telegram WebApp
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- База данных SQLite ---
+# --- База данных ---
 DATABASE = "game.db"
 
 @contextmanager
@@ -33,7 +31,6 @@ def get_db():
     finally:
         conn.close()
 
-# Инициализация таблиц
 def init_db():
     with get_db() as conn:
         conn.execute("""
@@ -68,45 +65,12 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # Добавляем колонку state, если её нет
-        try:
-            conn.execute("ALTER TABLE players ADD COLUMN state TEXT")
-        except:
-            pass
 
 init_db()
-
-# --- Модели данных ---
-class RegisterData(BaseModel):
-    action: str = "register"
-    user_id: str
-    name: str
-    referrer_id: Optional[str] = None
-
-class SaveData(BaseModel):
-    action: str = "save"
-    user_id: str
-    ton: float
-    gpu: int
-    friends: int
-    ton_earned: float = 0
-    state: Optional[dict] = None
-
-class ReferralData(BaseModel):
-    action: str = "getReferrals"
-    user_id: str
-
-class DepositData(BaseModel):
-    action: str = "createDeposit"
-    user_id: str
-    name: str
-    amount: float
 
 # --- Эндпоинты ---
 @app.post("/api/tg")
 async def telegram_api(request: Request):
-    """Главный эндпоинт, который вызывается из игры"""
     try:
         data = await request.json()
         action = data.get("action")
@@ -121,7 +85,6 @@ async def telegram_api(request: Request):
             return await create_deposit(data)
         else:
             return {"success": False, "error": "Unknown action"}
-            
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -131,11 +94,9 @@ async def register_player(data):
     referrer_id = data.get("referrer_id")
     
     with get_db() as conn:
-        # Проверяем, существует ли игрок
         existing = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
         
         if existing:
-            # Возвращаем существующего
             state = json.loads(existing["state"]) if existing["state"] else {}
             return {
                 "success": True,
@@ -147,21 +108,16 @@ async def register_player(data):
                 }
             }
         
-        # Новый игрок
-        # Обрабатываем рефералку
         if referrer_id and referrer_id != user_id:
-            # Добавляем в таблицу рефералов
             conn.execute(
                 "INSERT INTO referrals (referrer_id, friend_id, friend_name) VALUES (?, ?, ?)",
                 (referrer_id, user_id, name)
             )
-            # Увеличиваем счётчик друзей у реферера
             conn.execute(
                 "UPDATE players SET friends = friends + 1 WHERE user_id = ?",
                 (referrer_id,)
             )
         
-        # Создаём нового игрока
         conn.execute(
             "INSERT INTO players (user_id, name, referrer_id) VALUES (?, ?, ?)",
             (user_id, name, referrer_id)
@@ -186,14 +142,12 @@ async def save_player(data):
     state = data.get("state")
     
     with get_db() as conn:
-        # Обновляем данные
         state_json = json.dumps(state) if state else None
         conn.execute(
             "UPDATE players SET ton = ?, gpu = ?, friends = ?, state = ? WHERE user_id = ?",
             (ton, gpu, friends, state_json, user_id)
         )
         
-        # Если есть заработок TON, начисляем рефереру 10%
         if ton_earned > 0:
             referrer = conn.execute(
                 "SELECT referrer_id FROM players WHERE user_id = ?", (user_id,)
@@ -229,9 +183,8 @@ async def create_deposit(data):
     name = data["name"]
     amount = float(data["amount"])
     
-    # Генерируем уникальный кошелёк и комментарий
     deposit_id = secrets.token_hex(8)
-    wallet = "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"  # Замените на свой кошелёк
+    wallet = "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     comment = f"DEP_{user_id}_{deposit_id}"
     
     with get_db() as conn:
@@ -254,6 +207,6 @@ async def create_deposit(data):
 async def root():
     return {"message": "Telegram Game Backend is running!", "status": "ok"}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+@app.get("/health")
+async def health():
+    return {"status": "alive"}
