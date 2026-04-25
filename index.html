@@ -569,6 +569,7 @@ async function claimGPU(idx) {
 }
 
 function startMining(idx) {
+  // Очищаем старый таймер
   if (miningIntervals[idx]) {
     clearInterval(miningIntervals[idx]);
     miningIntervals[idx] = null;
@@ -577,7 +578,7 @@ function startMining(idx) {
   const state = gpuStates[idx];
   if (!state || !state.active) return;
   
-  miningIntervals[idx] = setInterval(() => {
+  const updateProgress = () => {
     if (!gpuStates[idx] || !gpuStates[idx].active) {
       if (miningIntervals[idx]) {
         clearInterval(miningIntervals[idx]);
@@ -592,6 +593,7 @@ function startMining(idx) {
     currentState.earnedTon = currentState.totalTon * progress;
     currentState.earnedGpu = currentState.totalGpu * progress;
     
+    // Обновляем UI без перерисовки всей карты
     const fill = document.getElementById(`fill_${idx}`);
     const text = document.getElementById(`text_${idx}`);
     if (fill) fill.style.width = (progress * 100) + "%";
@@ -607,7 +609,10 @@ function startMining(idx) {
       saveGameState();
       if (typeof updateReferralCardsStatus === 'function') updateReferralCardsStatus();
     }
-  }, 500);
+  };
+  
+  updateProgress();
+  miningIntervals[idx] = setInterval(updateProgress, 1000);
 }
 
 function startAllMinings() {
