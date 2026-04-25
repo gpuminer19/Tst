@@ -5,8 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from datetime import datetime, timedelta
-import sqlite3
-from contextlib import contextmanager
+from supabase import create_client, Client
 
 app = FastAPI()
 
@@ -18,13 +17,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# База данных на постоянном диске
-# Render будет хранить её в /var/data (настроим позже)
-DATA_DIR = os.getenv("DATA_DIR", "/var/data")
-os.makedirs(DATA_DIR, exist_ok=True)
-DATABASE = os.path.join(DATA_DIR, "game.db")
-
+# Supabase подключение
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change_me")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise Exception("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 admin_session = {"authenticated": False, "expires_at": None}
 
@@ -33,23 +34,11 @@ def is_admin_authenticated(request: Request):
         return True
     return False
 
-@contextmanager
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+def safe_json_loads(data):
     try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
-
-def init_db():
-    with get_db() as conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS players (user_id TEXT PRIMARY KEY, name TEXT, ton REAL DEFAULT 5.0, gpu INTEGER DEFAULT 0, friends INTEGER DEFAULT 0, referrer_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, state TEXT)")
-        conn.execute("CREATE TABLE IF NOT EXISTS referrals (id INTEGER PRIMARY KEY AUTOINCREMENT, referrer_id TEXT, friend_id TEXT, friend_name TEXT, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-        conn.execute("CREATE TABLE IF NOT EXISTS deposits (id TEXT PRIMARY KEY, user_id TEXT, amount REAL, wallet TEXT, comment TEXT, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-
-init_db()
+        return json.loads(data) if data else {}
+    except:
+        return {}
 
 @app.post("/api/tg")
 async def telegram_api(request: Request):
@@ -72,16 +61,56 @@ async def register_player(data):
     user_id = data["user_id"]
     name = data["name"]
     referrer_id = data.get("referrer_id")
-    with get_db() as conn:
-        existing = conn.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
-        if existing:
-            state = json.loads(existing["state"]) if existing["state"] else {}
-            return {"success": True, "data": {"ton": existing["ton"], "gpu": existing["gpu"], "friends": existing["friends"], "state": state}}
-        if referrer_id and referrer_id != user_id:
-            conn.execute("INSERT INTO referrals (referrer_id, friend_id, friend_name) VALUES (?, ?, ?)", (referrer_id, user_id, name))
-            conn.execute("UPDATE players SET friends = friends + 1 WHERE user_id = ?", (referrer_id,))
-        conn.execute("INSERT INTO players (user_id, name, referrer_id) VALUES (?, ?, ?)", (user_id, name, referrer_id))
-        return {"success": True, "data": {"ton": 5.0, "gpu": 0, "friends": 0, "state": {}}}
+    
+    # Проверяем существование
+    existing = supabase.table("players").select("*").eq("user_id", user_id).execute()
+    
+    if existing.data:
+        player = existing.data[0]
+        return {
+            "success": True,
+            "data": {
+                "ton": player["ton"],
+                "gpu": player["gpu"],
+                "friends": player["friends"],
+                "state": safe_json_loads(player.get("state"))
+            }
+        }
+    
+    # Новый игрок
+    if referrer_id and referrer_id != user_id:
+        try:
+            supabase.table("referrals").insert({
+                "referrer_id": referrer_id,
+                "friend_id": user_id,
+                "friend_name": name
+            }).execute()
+            # Увеличиваем счётчик друзей у реферера
+            referrer = supabase.table("players").select("friends").eq("user_id", referrer_id).execute()
+            if referrer.data:
+                new_friends = referrer.data[0]["friends"] + 1
+                supabase.table("players").update({"friends": new_friends}).eq("user_id", referrer_id).execute()
+        except Exception as e:
+            print(f"Referral error: {e}")
+    
+    supabase.table("players").insert({
+        "user_id": user_id,
+        "name": name,
+        "referrer_id": referrer_id,
+        "ton": 5.0,
+        "gpu": 0,
+        "friends": 0
+    }).execute()
+    
+    return {
+        "success": True,
+        "data": {
+            "ton": 5.0,
+            "gpu": 0,
+            "friends": 0,
+            "state": {}
+        }
+    }
 
 async def save_player(data):
     user_id = data["user_id"]
@@ -90,20 +119,39 @@ async def save_player(data):
     friends = data["friends"]
     ton_earned = data.get("ton_earned", 0)
     state = data.get("state")
-    with get_db() as conn:
-        state_json = json.dumps(state) if state else None
-        conn.execute("UPDATE players SET ton = ?, gpu = ?, friends = ?, state = ? WHERE user_id = ?", (ton, gpu, friends, state_json, user_id))
-        if ton_earned > 0:
-            referrer = conn.execute("SELECT referrer_id FROM players WHERE user_id = ?", (user_id,)).fetchone()
-            if referrer and referrer["referrer_id"]:
-                conn.execute("UPDATE players SET ton = ton + ? WHERE user_id = ?", (ton_earned * 0.1, referrer["referrer_id"]))
+    
+    state_json = json.dumps(state) if state else None
+    
+    supabase.table("players").update({
+        "ton": ton,
+        "gpu": gpu,
+        "friends": friends,
+        "state": state_json
+    }).eq("user_id", user_id).execute()
+    
+    # Реферальная комиссия
+    if ton_earned > 0:
+        try:
+            referrer = supabase.table("players").select("referrer_id").eq("user_id", user_id).execute()
+            if referrer.data and referrer.data[0].get("referrer_id"):
+                ref_id = referrer.data[0]["referrer_id"]
+                commission = ton_earned * 0.1
+                current = supabase.table("players").select("ton").eq("user_id", ref_id).execute()
+                if current.data:
+                    new_ton = current.data[0]["ton"] + commission
+                    supabase.table("players").update({"ton": new_ton}).eq("user_id", ref_id).execute()
+        except Exception as e:
+            print(f"Commission error: {e}")
+    
     return {"success": True}
 
 async def get_referrals(data):
     user_id = data["user_id"]
-    with get_db() as conn:
-        referrals = conn.execute("SELECT friend_name, date FROM referrals WHERE referrer_id = ? ORDER BY date DESC", (user_id,)).fetchall()
-        return {"success": True, "referrals": [{"friend_name": r["friend_name"], "date": r["date"]} for r in referrals]}
+    referrals = supabase.table("referrals").select("friend_name, date").eq("referrer_id", user_id).order("date", desc=True).execute()
+    return {
+        "success": True,
+        "referrals": [{"friend_name": r["friend_name"], "date": r["date"]} for r in referrals.data]
+    }
 
 async def create_deposit(data):
     user_id = data["user_id"]
@@ -111,9 +159,24 @@ async def create_deposit(data):
     deposit_id = secrets.token_hex(8)
     wallet = "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     comment = f"DEP_{user_id}_{deposit_id}"
-    with get_db() as conn:
-        conn.execute("INSERT INTO deposits (id, user_id, amount, wallet, comment) VALUES (?, ?, ?, ?, ?)", (deposit_id, user_id, amount, wallet, comment))
-    return {"success": True, "deposit": {"amount": amount, "wallet": wallet, "comment": comment, "id": deposit_id}}
+    
+    supabase.table("deposits").insert({
+        "id": deposit_id,
+        "user_id": user_id,
+        "amount": amount,
+        "wallet": wallet,
+        "comment": comment
+    }).execute()
+    
+    return {
+        "success": True,
+        "deposit": {
+            "amount": amount,
+            "wallet": wallet,
+            "comment": comment,
+            "id": deposit_id
+        }
+    }
 
 @app.get("/")
 async def root():
@@ -176,34 +239,40 @@ async def admin_logout():
     return response
 
 async def render_admin():
-    with get_db() as conn:
-        total_players = conn.execute("SELECT COUNT(*) as count FROM players").fetchone()["count"]
-        total_ton = conn.execute("SELECT SUM(ton) as sum FROM players").fetchone()["sum"] or 0
-        total_gpu = conn.execute("SELECT SUM(gpu) as sum FROM players").fetchone()["sum"] or 0
-        pending_count = conn.execute("SELECT COUNT(*) as count FROM deposits WHERE status='pending'").fetchone()["count"]
-        pending_deposits = conn.execute("SELECT id, user_id, amount, comment, created_at FROM deposits WHERE status='pending' ORDER BY created_at DESC LIMIT 30").fetchall()
-        top_players = conn.execute("SELECT user_id, name, ton, gpu, friends FROM players ORDER BY ton DESC LIMIT 10").fetchall()
-        recent_players = conn.execute("SELECT user_id, name, ton, created_at FROM players ORDER BY created_at DESC LIMIT 10").fetchall()
+    # Получаем данные из Supabase
+    players_data = supabase.table("players").select("*").execute()
+    total_players = len(players_data.data) if players_data.data else 0
+    total_ton = sum(p["ton"] for p in players_data.data) if players_data.data else 0
+    total_gpu = sum(p["gpu"] for p in players_data.data) if players_data.data else 0
+    
+    deposits = supabase.table("deposits").select("*").eq("status", "pending").order("created_at", desc=True).limit(30).execute()
+    pending_count = len(deposits.data) if deposits.data else 0
+    
+    top = supabase.table("players").select("user_id,name,ton,gpu,friends").order("ton", desc=True).limit(10).execute()
+    recent = supabase.table("players").select("user_id,name,ton,created_at").order("created_at", desc=True).limit(10).execute()
     
     deposits_html = ""
-    for d in pending_deposits:
-        deposits_html += f'''
-        <div style="background:rgba(12,18,32,0.75);border-radius:20px;padding:16px;margin-bottom:12px;border-left:3px solid #FFB347">
-            <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:20px;font-weight:700;color:#FFB347">{d["amount"]} TON</span><span style="font-size:11px;color:#6B7CA8">{d["created_at"][:16] if d["created_at"] else ""}</span></div>
-            <div style="font-size:12px;margin-bottom:8px">ID: <code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:8px">{d["user_id"]}</code></div>
-            <div style="font-size:12px;margin-bottom:12px">Comment: <code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:8px">{d["comment"]}</code></div>
-            <div style="display:flex;gap:8px"><button onclick="approve('{d["id"]}','{d["user_id"]}',{d["amount"]})" style="background:#00A86B;border:none;padding:8px 16px;border-radius:30px;color:#fff">Confirm</button><button onclick="reject('{d["id"]}')" style="background:#DC2626;border:none;padding:8px 16px;border-radius:30px;color:#fff">Reject</button></div>
-        </div>'''
-    if not pending_deposits:
+    if deposits.data:
+        for d in deposits.data:
+            deposits_html += f'''
+            <div style="background:rgba(12,18,32,0.75);border-radius:20px;padding:16px;margin-bottom:12px;border-left:3px solid #FFB347">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:20px;font-weight:700;color:#FFB347">{d["amount"]} TON</span><span style="font-size:11px;color:#6B7CA8">{d["created_at"][:16] if d["created_at"] else ""}</span></div>
+                <div style="font-size:12px;margin-bottom:8px">ID: <code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:8px">{d["user_id"]}</code></div>
+                <div style="font-size:12px;margin-bottom:12px">Comment: <code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:8px">{d["comment"]}</code></div>
+                <div style="display:flex;gap:8px"><button onclick="approve('{d["id"]}','{d["user_id"]}',{d["amount"]})" style="background:#00A86B;border:none;padding:8px 16px;border-radius:30px;color:#fff">Confirm</button><button onclick="reject('{d["id"]}')" style="background:#DC2626;border:none;padding:8px 16px;border-radius:30px;color:#fff">Reject</button></div>
+            </div>'''
+    else:
         deposits_html = '<div style="background:rgba(12,18,32,0.75);border-radius:20px;padding:16px;text-align:center;color:#6B7CA8">No pending deposits</div>'
     
     top_html = ""
-    for i, p in enumerate(top_players):
-        top_html += f'''<div style="background:rgba(12,18,32,0.75);border-radius:20px;padding:16px;margin-bottom:12px"><div style="display:flex;justify-content:space-between"><span><span style="background:rgba(0,212,255,0.15);padding:4px 10px;border-radius:20px;font-size:11px">#{i+1}</span> <strong>{p["name"][:25]}</strong></span><span style="color:#00D4FF;font-weight:700">{p["ton"]:.2f} TON</span></div><div style="font-size:11px;color:#6B7CA8;margin-top:8px">GPU: {p["gpu"]} | Friends: {p["friends"]} | ID: {p["user_id"][:12]}...</div></div>'''
+    if top.data:
+        for i, p in enumerate(top.data):
+            top_html += f'''<div style="background:rgba(12,18,32,0.75);border-radius:20px;padding:16px;margin-bottom:12px"><div style="display:flex;justify-content:space-between"><span><span style="background:rgba(0,212,255,0.15);padding:4px 10px;border-radius:20px;font-size:11px">#{i+1}</span> <strong>{p["name"][:25]}</strong></span><span style="color:#00D4FF;font-weight:700">{p["ton"]:.2f} TON</span></div><div style="font-size:11px;color:#6B7CA8;margin-top:8px">GPU: {p["gpu"]} | Friends: {p["friends"]} | ID: {p["user_id"][:12]}...</div></div>'''
     
     recent_html = ""
-    for p in recent_players:
-        recent_html += f'''<div style="background:rgba(12,18,32,0.75);border-radius:20px;padding:16px;margin-bottom:12px"><div style="display:flex;justify-content:space-between"><strong>{p["name"][:25]}</strong><span style="color:#00D4FF">{p["ton"]:.2f} TON</span></div><div style="font-size:11px;color:#6B7CA8;margin-top:8px">ID: <code>{p["user_id"]}</code> | {p["created_at"][:16] if p["created_at"] else ""}</div></div>'''
+    if recent.data:
+        for p in recent.data:
+            recent_html += f'''<div style="background:rgba(12,18,32,0.75);border-radius:20px;padding:16px;margin-bottom:12px"><div style="display:flex;justify-content:space-between"><strong>{p["name"][:25]}</strong><span style="color:#00D4FF">{p["ton"]:.2f} TON</span></div><div style="font-size:11px;color:#6B7CA8;margin-top:8px">ID: <code>{p["user_id"]}</code> | {p["created_at"][:16] if p["created_at"] else ""}</div></div>'''
     
     html = f'''<!DOCTYPE html>
 <html>
@@ -305,36 +374,50 @@ if(d.success){{alert(`Added ${{amt}} TON!`);searchPlayer();}}else{{alert('Error'
 async def api_approve(request: Request, deposit_id: str, user_id: str, amount: float):
     if not is_admin_authenticated(request):
         return {"success": False}
-    with get_db() as conn:
-        conn.execute("UPDATE players SET ton = ton + ? WHERE user_id = ?", (amount, user_id))
-        conn.execute("UPDATE deposits SET status = 'approved' WHERE id = ?", (deposit_id,))
-    return {"success": True}
+    try:
+        player = supabase.table("players").select("ton").eq("user_id", user_id).execute()
+        if player.data:
+            new_ton = player.data[0]["ton"] + amount
+            supabase.table("players").update({"ton": new_ton}).eq("user_id", user_id).execute()
+        supabase.table("deposits").update({"status": "approved"}).eq("id", deposit_id).execute()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.get("/admin/api/reject")
 async def api_reject(request: Request, deposit_id: str):
     if not is_admin_authenticated(request):
         return {"success": False}
-    with get_db() as conn:
-        conn.execute("UPDATE deposits SET status = 'rejected' WHERE id = ?", (deposit_id,))
-    return {"success": True}
+    try:
+        supabase.table("deposits").update({"status": "rejected"}).eq("id", deposit_id).execute()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.get("/admin/api/player")
 async def api_player(request: Request, user_id: str):
     if not is_admin_authenticated(request):
         return {"success": False}
-    with get_db() as conn:
-        player = conn.execute("SELECT user_id, name, ton, gpu, friends FROM players WHERE user_id = ?", (user_id,)).fetchone()
-    if player:
-        return {"success": True, "player": dict(player)}
-    return {"success": False}
+    try:
+        player = supabase.table("players").select("user_id,name,ton,gpu,friends").eq("user_id", user_id).execute()
+        if player.data:
+            return {"success": True, "player": player.data[0]}
+        return {"success": False}
+    except Exception as e:
+        return {"success": False}
 
 @app.get("/admin/api/bonus")
 async def api_bonus(request: Request, user_id: str, amount: float):
     if not is_admin_authenticated(request):
         return {"success": False}
-    with get_db() as conn:
-        conn.execute("UPDATE players SET ton = ton + ? WHERE user_id = ?", (amount, user_id))
-    return {"success": True}
+    try:
+        player = supabase.table("players").select("ton").eq("user_id", user_id).execute()
+        if player.data:
+            new_ton = player.data[0]["ton"] + amount
+            supabase.table("players").update({"ton": new_ton}).eq("user_id", user_id).execute()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False}
 
 if __name__ == "__main__":
     import uvicorn
