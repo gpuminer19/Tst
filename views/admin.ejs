@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoGPU Admin Panel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0B0E1A; font-family: system-ui, -apple-system, sans-serif; color: #fff; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .card { background: rgba(20, 25, 45, 0.9); border-radius: 24px; padding: 20px; margin-bottom: 20px; border: 1px solid rgba(0, 212, 255, 0.2); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
+        .stat-card { background: linear-gradient(135deg, #1A2A5E, #0F1A3A); padding: 20px; border-radius: 20px; text-align: center; }
+        .stat-value { font-size: 32px; font-weight: bold; color: #00D4FF; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        th { color: #00D4FF; }
+        button { background: #00A86B; border: none; padding: 6px 16px; border-radius: 20px; color: white; cursor: pointer; margin: 2px; }
+        .btn-reject { background: #DC2626; }
+        .login-box { max-width: 400px; margin: 100px auto; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: rgba(0,0,0,0.4); border: 1px solid #00D4FF; border-radius: 12px; color: white; }
+        .alert { padding: 12px; border-radius: 12px; margin-bottom: 20px; }
+        .alert-success { background: rgba(0,168,107,0.2); border: 1px solid #00A86B; }
+        .alert-error { background: rgba(220,38,38,0.2); border: 1px solid #DC2626; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <% if (view === 'login') { %>
+        <div class="login-box card">
+            <h2>🔐 Admin Login</h2>
+            <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+            <form method="POST">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit" style="width:100%; margin-top:10px;">Login</button>
+            </form>
+        </div>
+    <% } else if (view === 'dashboard') { %>
+        <div class="header">
+            <h1>⚡ CryptoGPU Admin</h1>
+            <a href="/admin/logout" style="color:#FF8C00;">Logout</a>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">👥 Users<br><span class="stat-value"><%= stats.users %></span></div>
+            <div class="stat-card">💰 TON Circulating<br><span class="stat-value"><%= stats.tonCirculating.toFixed(2) %></span></div>
+            <div class="stat-card">⏳ Pending Deposits<br><span class="stat-value"><%= stats.pendingDeposits %></span></div>
+            <div class="stat-card">📤 Pending Withdraws<br><span class="stat-value"><%= stats.pendingWithdraws %></span></div>
+        </div>
+        
+        <!-- Заявки на пополнение -->
+        <div class="card">
+            <h2>💎 Deposit Requests</h2>
+            <% if (deposits.length === 0) { %><p>No pending deposits</p>
+            <% } else { %>
+                <table>
+                    <tr><th>User</th><th>Amount (TON)</th><th>Wallet</th><th>Comment</th><th>Date</th><th>Actions</th></tr>
+                    <% deposits.forEach(d => { %>
+                        <tr>
+                            <td><%= d.userName %> (<%= d.userId %>)</td>
+                            <td><%= d.amount %></td>
+                            <td><%= d.wallet %></td>
+                            <td><%= d.comment %></td>
+                            <td><%= new Date(d.createdAt).toLocaleString() %></td>
+                            <td>
+                                <form method="POST" action="/admin/approve" style="display:inline;">
+                                    <input type="hidden" name="id" value="<%= d._id %>">
+                                    <input type="hidden" name="type" value="deposit">
+                                    <button type="submit">✅ Approve</button>
+                                </form>
+                                <form method="POST" action="/admin/reject" style="display:inline;">
+                                    <input type="hidden" name="id" value="<%= d._id %>">
+                                    <button type="submit" class="btn-reject">❌ Reject</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </table>
+            <% } %>
+        </div>
+        
+        <!-- Заявки на вывод -->
+        <div class="card">
+            <h2>📤 Withdraw Requests</h2>
+            <% if (withdraws.length === 0) { %><p>No pending withdraws</p>
+            <% } else { %>
+                <table>
+                    <tr><th>User</th><th>Amount (TON)</th><th>TON Wallet</th><th>Comment</th><th>Date</th><th>Actions</th></tr>
+                    <% withdraws.forEach(w => { %>
+                        <tr>
+                            <td><%= w.userName %> (<%= w.userId %>)</td>
+                            <td><%= w.amount %></td>
+                            <td><%= w.wallet %></td>
+                            <td><%= w.comment %></td>
+                            <td><%= new Date(w.createdAt).toLocaleString() %></td>
+                            <td>
+                                <form method="POST" action="/admin/approve" style="display:inline;">
+                                    <input type="hidden" name="id" value="<%= w._id %>">
+                                    <input type="hidden" name="type" value="withdraw">
+                                    <button type="submit">💰 Approve & Send</button>
+                                </form>
+                                <form method="POST" action="/admin/reject" style="display:inline;">
+                                    <input type="hidden" name="id" value="<%= w._id %>">
+                                    <button type="submit" class="btn-reject">❌ Reject</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </table>
+            <% } %>
+        </div>
+    <% } %>
+</div>
+</body>
+</html>
