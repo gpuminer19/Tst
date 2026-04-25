@@ -1,106 +1,80 @@
 import os
 import json
-import threading
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
-import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# ================= CONFIG =================
+# ========= CONFIG =========
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+API_SECRET = os.environ.get("API_SECRET", "123")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x]
-API_SECRET = os.environ.get("API_SECRET", "secret")
-TON_WALLET = os.environ.get("TON_WALLET", "wallet")
-
-def get_env_float(name, default):
-    try:
-        return float(os.environ.get(name, default))
-    except:
-        return default
-
-MIN_WITHDRAW = get_env_float("MIN_WITHDRAW", 2)
-MAX_WITHDRAW = get_env_float("MAX_WITHDRAW", 100)
-
-# ================= APP =================
+TON_WALLET = os.environ.get("TON_WALLET", "UQXXXXXXXXXXXX")
 
 app = Flask(__name__)
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
-if not DATABASE_URL:
-    DATABASE_URL = "sqlite:///game.db"
-elif DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///game.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = "secret"
 
 db = SQLAlchemy(app)
-bot = telebot.TeleBot(BOT_TOKEN)
 
-# ================= MODELS =================
+# ========= MODELS =========
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(100), unique=True)
     name = db.Column(db.String(200))
-    ton = db.Column(db.Float, default=0)
+    ton = db.Column(db.Float, default=5)
     gpu = db.Column(db.Integer, default=0)
-    friends_count = db.Column(db.Integer, default=0)
-    referrer_id = db.Column(db.String(100))
-    mining_state = db.Column(db.Text, default="{}")
+    friends = db.Column(db.Integer, default=0)
+    state = db.Column(db.Text, default="{}")
 
 class Deposit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(100))
     amount = db.Column(db.Float)
+    comment = db.Column(db.String(200))
     status = db.Column(db.String(20), default="pending")
 
-class Withdraw(db.Model):
+class Referral(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(100))
-    amount = db.Column(db.Float)
-    wallet = db.Column(db.String(200))
-    status = db.Column(db.String(20), default="pending")
+    friend_name = db.Column(db.String(200))
+    date = db.Column(db.String(50))
 
-# ================= ADMIN =================
+# ========= ADMIN =========
 
-admin = Admin(app, name="Admin")  # 🔥 без template_mode
+admin = Admin(app, name="Admin")
 
 admin.add_view(ModelView(User, db.session))
 admin.add_view(ModelView(Deposit, db.session))
-admin.add_view(ModelView(Withdraw, db.session))
+admin.add_view(ModelView(Referral, db.session))
 
-# ================= API =================
+# ========= HELPERS =========
 
-def check_secret(req):
+def check_key(req):
     return req.headers.get("X-API-KEY") == API_SECRET
 
-def get_user(uid):
-    return User.query.filter_by(user_id=uid).first()
+# ========= API =========
 
 @app.route("/api", methods=["POST"])
 def api():
-    if not check_secret(request):
+
+    if not check_key(request):
         return jsonify({"success": False})
 
     data = request.json
     action = data.get("action")
     user_id = str(data.get("user_id"))
 
-    if not user_id:
-        return jsonify({"success": False})
+    user = User.query.filter_by(user_id=user_id).first()
 
-    # REGISTER
+    # ===== REGISTER =====
     if action == "register":
-        user = get_user(user_id)
         if not user:
-            user = User(user_id=user_id, name=data.get("name", "Player"))
+            user = User(user_id=user_id, name=data.get("name"))
             db.session.add(user)
             db.session.commit()
 
@@ -108,62 +82,68 @@ def api():
             "success": True,
             "data": {
                 "ton": user.ton,
-                "gpu": user.gpu
+                "gpu": user.gpu,
+                "friends": user.friends,
+                "state": json.loads(user.state)
             }
         })
 
-    # MINE
-    if action == "mine":
-        user = get_user(user_id)
+    # ===== SAVE =====
+    if action == "save":
         if user:
-            user.ton += 0.01
+            user.ton = data.get("ton", user.ton)
+            user.gpu = data.get("gpu", user.gpu)
+            if data.get("state"):
+                user.state = json.dumps(data.get("state"))
             db.session.commit()
-            return jsonify({"success": True, "ton": user.ton})
-
-    # WITHDRAW
-    if action == "withdraw":
-        user = get_user(user_id)
-        amount = float(data.get("amount", 0))
-        wallet = data.get("wallet")
-
-        if not user:
-            return jsonify({"success": False})
-
-        if amount < MIN_WITHDRAW:
-            return jsonify({"success": False, "error": "Min 2 TON"})
-
-        if amount > MAX_WITHDRAW:
-            return jsonify({"success": False, "error": "Too much"})
-
-        if user.ton < amount:
-            return jsonify({"success": False, "error": "No balance"})
-
-        user.ton -= amount
-
-        w = Withdraw(user_id=user_id, amount=amount, wallet=wallet)
-        db.session.add(w)
-        db.session.commit()
-
-        for admin in ADMIN_IDS:
-            bot.send_message(admin, f"Withdraw\n{user_id}\n{amount}\n{wallet}")
 
         return jsonify({"success": True})
 
+    # ===== REFERRALS =====
+    if action == "getReferrals":
+        refs = Referral.query.filter_by(user_id=user_id).all()
+        return jsonify({
+            "success": True,
+            "referrals": [
+                {"name": r.friend_name, "date": r.date}
+                for r in refs
+            ]
+        })
+
+    # ===== CREATE DEPOSIT =====
+    if action == "createDeposit":
+        amount = float(data.get("amount"))
+        comment = f"GPU-{user_id}-{int(datetime.now().timestamp())}"
+
+        dep = Deposit(
+            user_id=user_id,
+            amount=amount,
+            comment=comment
+        )
+
+        db.session.add(dep)
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "deposit": {
+                "wallet": TON_WALLET,
+                "amount": amount,
+                "comment": comment
+            }
+        })
+
     return jsonify({"success": False})
 
-# ================= BOT =================
-
-def run_bot():
-    bot.infinity_polling()
-
-# ================= RUN =================
+# ========= ROOT =========
 
 @app.route("/")
 def home():
     return "OK"
 
+# ========= RUN =========
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-
-threading.Thread(target=run_bot).start()
+    app.run(host="0.0.0.0", port=8080)
