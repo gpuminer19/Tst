@@ -84,6 +84,8 @@
   
   .referral-cards-grid { display: flex; flex-direction: column; gap: 12px; margin: 16px; }
   .locked-card { opacity: 0.6; filter: grayscale(0.3); }
+  .progress-bar-small { background: #1A1F35; border-radius: 10px; height: 6px; margin-top: 5px; }
+  .progress-fill-small { background: #00A86B; border-radius: 10px; height: 6px; }
 </style>
 </head>
 <body>
@@ -127,9 +129,9 @@
     <div class="friend-count" id="friendCount">0</div>
     <div class="badge" style="display:inline-block; margin-top:4px; line-height:1.4;">
       🎁 РЕФЕРАЛЬНЫЕ БОНУСЫ:<br>
-      👥 10 друзей → BASIC GPU (1 TON/цикл)<br>
-      🔥 50 друзей → ULTRA GPU (5 TON/цикл)<br>
-      💎 150 друзей → LEGENDARY GPU (20 TON/цикл)
+      👥 BASIC GPU: 5 друзей по 100 GPU<br>
+      🔥 ULTRA GPU: 5 друзей по 500 GPU<br>
+      💎 LEGENDARY GPU: 5 друзей по 2000 GPU
     </div>
     <div class="friends-list" id="friendsList">
       <div style="text-align:center; padding:10px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>
@@ -140,7 +142,7 @@
     <div class="card" id="refCardBasic" style="border-color:#FFB347;">
       <img src="8.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFB347);">
       <div class="card-info">
-        <h3>👥 BASIC GPU <span class="badge" style="background:#FF8C20;">10 друзей</span></h3>
+        <h3>👥 BASIC GPU <span class="badge" style="background:#FF8C20;">5 друзей по 100 GPU</span></h3>
         <div class="rewards-info"><span>💰 +1 TON</span><span>⚡ +5 GPU</span><span>⏱ 1 мин</span></div>
         <div id="refCardBasicStatus"></div>
       </div>
@@ -149,7 +151,7 @@
     <div class="card" id="refCardUltra" style="border-color:#00D4FF;">
       <img src="8.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #00D4FF);">
       <div class="card-info">
-        <h3>🔥 ULTRA GPU <span class="badge" style="background:#00D4FF;">50 друзей</span></h3>
+        <h3>🔥 ULTRA GPU <span class="badge" style="background:#00D4FF;">5 друзей по 500 GPU</span></h3>
         <div class="rewards-info"><span>💰 +5 TON</span><span>⚡ +25 GPU</span><span>⏱ 2 мин</span></div>
         <div id="refCardUltraStatus"></div>
       </div>
@@ -158,7 +160,7 @@
     <div class="card" id="refCardLegendary" style="border-color:#FFD700;">
       <img src="8.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFD700);">
       <div class="card-info">
-        <h3>💎 LEGENDARY GPU <span class="badge" style="background:#FFD700; color:#0B0E1A;">150 друзей</span></h3>
+        <h3>💎 LEGENDARY GPU <span class="badge" style="background:#FFD700; color:#0B0E1A;">5 друзей по 2000 GPU</span></h3>
         <div class="rewards-info"><span>💰 +20 TON</span><span>⚡ +100 GPU</span><span>⏱ 5 мин</span></div>
         <div id="refCardLegendaryStatus"></div>
       </div>
@@ -235,14 +237,19 @@ let playerData = {
 let gpuStates = [];
 let miningIntervals = [];
 
+// ========== НОВЫЕ КАРТЫ ==========
 const gpuTemplates = [
-  { name: "GTX 1060", price: 1, tonReward: 1.2, gpuReward: 2, durationMs: 60000 },
-  { name: "RTX 2060", price: 2, tonReward: 2.4, gpuReward: 4, durationMs: 120000 },
-  { name: "RTX 3060", price: 3, tonReward: 3.6, gpuReward: 6, durationMs: 180000 },
-  { name: "EPIC GPU", price: 5, tonReward: 6, gpuReward: 10, durationMs: 300000 },
-  { name: "👥 BASIC GPU", price: 0, tonReward: 1, gpuReward: 5, durationMs: 60000, requiredFriends: 10, tier: "basic" },
-  { name: "🔥 ULTRA GPU", price: 0, tonReward: 5, gpuReward: 25, durationMs: 120000, requiredFriends: 50, tier: "ultra" },
-  { name: "💎 LEGENDARY GPU", price: 0, tonReward: 20, gpuReward: 100, durationMs: 300000, requiredFriends: 150, tier: "legendary" }
+  { name: "RTX 2060", price: 2, priceCurrency: "ton", tonReward: 2.4, gpuReward: 4, durationMs: 120000 },
+  { name: "RTX 3060", price: 3, priceCurrency: "ton", tonReward: 3.6, gpuReward: 6, durationMs: 180000 },
+  { name: "EPIC GPU", price: 5, priceCurrency: "ton", tonReward: 6, gpuReward: 10, durationMs: 300000 },
+  { name: "ULTRA PRO GPU", price: 50, priceCurrency: "ton", tonReward: 60, gpuReward: 200, durationMs: 600000 },
+  { name: "LEGENDARY PRO GPU", price: 100, priceCurrency: "ton", tonReward: 120, gpuReward: 500, durationMs: 1200000 },
+  
+  { name: "RTX 1060", price: 1, priceCurrency: "gpu", tonReward: 0, gpuReward: 5, durationMs: 60000 },
+  
+  { name: "👥 BASIC GPU", price: 0, priceCurrency: "ref", tonReward: 1, gpuReward: 5, durationMs: 60000, requiredActive: 5, requiredEarned: 100, tier: "basic" },
+  { name: "🔥 ULTRA GPU", price: 0, priceCurrency: "ref", tonReward: 5, gpuReward: 25, durationMs: 120000, requiredActive: 5, requiredEarned: 500, tier: "ultra" },
+  { name: "💎 LEGENDARY GPU", price: 0, priceCurrency: "ref", tonReward: 20, gpuReward: 100, durationMs: 300000, requiredActive: 5, requiredEarned: 2000, tier: "legendary" }
 ];
 
 // ========== ОЧИСТКА ТАЙМЕРОВ ==========
@@ -295,26 +302,46 @@ function renderFriendsList() {
     container.innerHTML = '<div style="text-align:center; padding:10px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>';
     return;
   }
-  container.innerHTML = playerData.invitedFriends.map(f => `
+  
+  // Прогресс по активным рефералам
+  const levels = [
+    { name: "BASIC GPU", required: 100, needed: 5 },
+    { name: "ULTRA GPU", required: 500, needed: 5 },
+    { name: "LEGENDARY GPU", required: 2000, needed: 5 }
+  ];
+  
+  let progressHtml = '<div style="background:rgba(0,0,0,0.3); border-radius:16px; padding:10px; margin-bottom:12px;">';
+  for (const level of levels) {
+    const activeCount = playerData.invitedFriends.filter(f => (f.earnedGpu || 0) >= level.required).length;
+    progressHtml += `<div style="font-size:11px; margin-bottom:5px;">
+      ${level.name}: ${activeCount}/${level.needed} друзей, заработавших ${level.required} GPU
+      <div class="progress-bar-small"><div class="progress-fill-small" style="width:${(activeCount / level.needed) * 100}%;"></div></div>
+    </div>`;
+  }
+  progressHtml += '</div>';
+  
+  const friendsHtml = playerData.invitedFriends.map(f => `
     <div class="friend-item">
       <div class="friend-avatar">👤</div>
       <div class="friend-info">
         <div class="friend-name">${f.friend_name || f.name}</div>
-        <div class="friend-date">Присоединился: ${f.date || "недавно"}</div>
+        <div class="friend-date">💰 Заработал: ${f.earnedGpu || 0} GPU</div>
+        <div class="friend-date">📅 Присоединился: ${f.date || "недавно"}</div>
       </div>
-    </div>`).join('');
+    </div>
+  `).join('');
+  
+  container.innerHTML = progressHtml + friendsHtml;
 }
 
 function updateRefLink() {
   document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
 }
 
-// ========== НОВАЯ ФУНКЦИЯ: ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ ПРИ ЛЮБОМ ДЕЙСТВИИ ==========
+// ========== ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ ==========
 async function refreshBalanceForAnyAction() {
     const result = await apiRequest("register", {});
     if (result && result.success) {
-        const hasChanged = playerData.ton !== result.data.ton;
-        
         playerData.ton = result.data.ton;
         playerData.gpuTokens = result.data.gpu;
         playerData.friends = result.data.friends;
@@ -324,12 +351,7 @@ async function refreshBalanceForAnyAction() {
         updateUI();
         renderFriendsList();
         renderHistory();
-        
-        if (hasChanged || result.data.friends !== playerData.friends) {
-            await checkAndActivateReferralCards();
-        }
-        
-        if (hasChanged) console.log(`🔄 Баланс синхронизирован: ${playerData.ton} TON`);
+        await checkAndActivateReferralCards();
     }
 }
 
@@ -337,7 +359,6 @@ async function syncBalance() {
   const result = await apiRequest("register", {});
   if (result && result.success) {
     if (playerData.ton !== result.data.ton) {
-      console.log(`🔄 Баланс синхронизирован: ${playerData.ton} → ${result.data.ton}`);
       playerData.ton = result.data.ton;
       playerData.gpuTokens = result.data.gpu;
       updateUI();
@@ -349,17 +370,14 @@ async function syncBalance() {
 
 // ========== АКТИВАЦИЯ РЕФЕРАЛЬНЫХ КАРТ ==========
 async function checkAndActivateReferralCards() {
-  const friendCount = playerData.friends;
-  
-  for (let i = 0; i < gpuTemplates.length; i++) {
+  for (let i = 7; i < gpuTemplates.length; i++) {
     const card = gpuTemplates[i];
-    if (card.requiredFriends === undefined) continue;
-    
-    if (!gpuStates[i]) initGpuStates();
     const cardState = gpuStates[i];
     if (cardState && (cardState.active || cardState.totalTon > 0)) continue;
     
-    if (friendCount >= card.requiredFriends) {
+    const activeCount = playerData.invitedFriends ? playerData.invitedFriends.filter(f => (f.earnedGpu || 0) >= card.requiredEarned).length : 0;
+    
+    if (activeCount >= card.requiredActive) {
       console.log(`🎉 Активация ${card.name}!`);
       cardState.active = true;
       cardState.totalTon = card.tonReward;
@@ -377,11 +395,10 @@ async function checkAndActivateReferralCards() {
 }
 
 function updateReferralCardsStatus() {
-  const friendCount = playerData.friends;
   const tiers = [
-    { id: "refCardBasic", required: 10, index: 4, rewardTon: 1, rewardGpu: 5 },
-    { id: "refCardUltra", required: 50, index: 5, rewardTon: 5, rewardGpu: 25 },
-    { id: "refCardLegendary", required: 150, index: 6, rewardTon: 20, rewardGpu: 100 }
+    { id: "refCardBasic", requiredEarned: 100, index: 7, rewardTon: 1, rewardGpu: 5, durationMs: 60000 },
+    { id: "refCardUltra", requiredEarned: 500, index: 8, rewardTon: 5, rewardGpu: 25, durationMs: 120000 },
+    { id: "refCardLegendary", requiredEarned: 2000, index: 9, rewardTon: 20, rewardGpu: 100, durationMs: 300000 }
   ];
   
   for (const tier of tiers) {
@@ -389,48 +406,43 @@ function updateReferralCardsStatus() {
     const statusDiv = document.getElementById(`${tier.id}Status`);
     if (!container || !statusDiv) continue;
     
+    const activeCount = playerData.invitedFriends ? playerData.invitedFriends.filter(f => (f.earnedGpu || 0) >= tier.requiredEarned).length : 0;
     const cardState = gpuStates[tier.index];
     
-    if (friendCount >= tier.required) {
+    if (activeCount >= 5) {
       container.classList.remove("locked-card");
       
       if (cardState && cardState.active) {
-        // Активно майнит - показываем прогресс-бар
         statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">${cardState.earnedTon.toFixed(2)}/${cardState.totalTon} TON</div></div>`;
       } else if (cardState && cardState.totalTon > 0 && !cardState.active && cardState.earnedTon >= cardState.totalTon - 0.01) {
-        // МАЙНИНГ ЗАВЕРШЁН - ПОКАЗЫВАЕМ КНОПКУ ЗАБРАТЬ
         statusDiv.innerHTML = `<button class="claim-btn claim-ref-reward" data-index="${tier.index}">🎁 Забрать ${cardState.totalTon} TON + ${cardState.totalGpu} GPU</button>`;
       } else if (cardState && !cardState.active && cardState.totalTon === 0) {
-        // Первый запуск - активируем
         cardState.active = true;
         cardState.totalTon = tier.rewardTon;
         cardState.totalGpu = tier.rewardGpu;
         cardState.earnedTon = 0;
         cardState.earnedGpu = 0;
         cardState.startedAt = Date.now();
-        cardState.durationMs = tier.rewardTon === 1 ? 60000 : (tier.rewardTon === 5 ? 120000 : 300000);
+        cardState.durationMs = tier.durationMs;
         renderCard(tier.index);
         startMining(tier.index);
         saveGameState();
         statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">0/${cardState.totalTon} TON</div></div>`;
       } else if (cardState && !cardState.active && cardState.totalTon > 0) {
-        // Восстанавливаем майнинг
         cardState.active = true;
         cardState.startedAt = Date.now();
         renderCard(tier.index);
         startMining(tier.index);
         saveGameState();
         statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">${cardState.earnedTon.toFixed(2)}/${cardState.totalTon} TON</div></div>`;
-      } else {
-        statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">0/${tier.rewardTon} TON</div></div>`;
       }
     } else {
       container.classList.add("locked-card");
-      statusDiv.innerHTML = `<div style="color:#6B7CA8;">🔒 Требуется ${tier.required - friendCount} друзей</div>`;
+      const needed = 5 - activeCount;
+      statusDiv.innerHTML = `<div style="color:#6B7CA8;">🔒 Нужно ещё ${needed} ${needed === 1 ? 'друг' : (needed < 5 ? 'друга' : 'друзей')}, заработавших ${tier.requiredEarned} GPU</div>`;
     }
   }
   
-  // ПРИВЯЗЫВАЕМ ОБРАБОТЧИКИ К КНОПКАМ
   document.querySelectorAll('.claim-ref-reward').forEach(btn => {
     btn.removeEventListener('click', handleClaimReward);
     btn.addEventListener('click', handleClaimReward);
@@ -439,29 +451,14 @@ function updateReferralCardsStatus() {
 
 async function handleClaimReward(e) {
   const cardIndex = parseInt(e.currentTarget.getAttribute('data-index'));
-  console.log("🔧 Нажата кнопка Забрать для карты:", cardIndex);
   await claimReferralReward(cardIndex);
 }
 
-// ========== БЕСШУМНЫЙ РЕФЕРАЛЬНЫЙ ФАРМ ==========
 async function claimReferralReward(cardIndex) {
-  console.log("🎁 claimReferralReward вызван для карты:", cardIndex);
-  
   await syncBalance();
   
   const state = gpuStates[cardIndex];
-  if (!state) {
-    console.log("❌ state не найден");
-    return;
-  }
-  
-  console.log("Состояние карты:", {
-    earnedTon: state.earnedTon,
-    totalTon: state.totalTon,
-    active: state.active
-  });
-  
-  if (state.earnedTon < state.totalTon - 0.01) {
+  if (!state || state.earnedTon < state.totalTon - 0.01) {
     tg.showAlert("⏳ Майнинг ещё не завершён");
     return;
   }
@@ -471,11 +468,9 @@ async function claimReferralReward(cardIndex) {
     miningIntervals[cardIndex] = null;
   }
   
-  // Начисляем награду
   playerData.ton += state.totalTon;
   playerData.gpuTokens += state.totalGpu;
   
-  // Сбрасываем и запускаем новый цикл
   state.earnedTon = 0;
   state.earnedGpu = 0;
   state.startedAt = Date.now();
@@ -486,10 +481,7 @@ async function claimReferralReward(cardIndex) {
   startMining(cardIndex);
   await saveGameState();
   
-  // Обновляем статус (кнопка исчезнет, появится прогресс-бар)
   updateReferralCardsStatus();
-  
-  console.log("✅ Награда зачислена, новый цикл запущен");
 }
 
 // ========== РАБОТА С БЭКЕНДОМ ==========
@@ -523,6 +515,7 @@ async function loadUserData(referrerId = null) {
       ton: result.data.ton, 
       gpuTokens: result.data.gpu, 
       friends: result.data.friends, 
+      invitedFriends: result.data.invitedFriends || [],
       transactions: result.data.transactions || [] 
     };
     
@@ -533,6 +526,7 @@ async function loadUserData(referrerId = null) {
     }
     
     updateUI();
+    renderFriendsList();
     renderHistory();
     renderAllCards();
     startAllMinings();
@@ -595,16 +589,34 @@ async function buyGPU(idx) {
   const gpu = gpuTemplates[idx];
   const state = gpuStates[idx];
   
-  if (playerData.ton < gpu.price) {
-    tg.showAlert("❌ Недостаточно TON");
-    return;
+  if (gpu.priceCurrency === "gpu") {
+    if (playerData.gpuTokens < gpu.price) {
+      tg.showAlert(`❌ Недостаточно GPU. Нужно: ${gpu.price} GPU`);
+      return;
+    }
+    if (state.active) {
+      tg.showAlert("⏳ Карта уже майнит");
+      return;
+    }
+    playerData.gpuTokens -= gpu.price;
+  } 
+  else if (gpu.priceCurrency === "ton") {
+    if (playerData.ton < gpu.price) {
+      tg.showAlert(`❌ Недостаточно TON. Нужно: ${gpu.price} TON`);
+      return;
+    }
+    if (state.active) {
+      tg.showAlert("⏳ Карта уже майнит");
+      return;
+    }
+    playerData.ton -= gpu.price;
+  } 
+  else {
+    if (state.active) {
+      tg.showAlert("⏳ Карта уже майнит");
+      return;
+    }
   }
-  if (state.active) {
-    tg.showAlert("⏳ Карта уже майнит");
-    return;
-  }
-  
-  playerData.ton -= gpu.price;
   
   state.active = true;
   state.totalTon = gpu.tonReward;
@@ -635,8 +647,16 @@ async function claimGPU(idx) {
     miningIntervals[idx] = null;
   }
   
+  const earnedGpu = state.totalGpu;
+  
   playerData.ton += state.totalTon;
-  playerData.gpuTokens += state.totalGpu;
+  playerData.gpuTokens += earnedGpu;
+  
+  // Обновляем статистику реферера
+  if (earnedGpu > 0) {
+    await apiRequest("updateFriendEarned", { earnedGpu: earnedGpu });
+  }
+  
   state.active = false;
   state.totalTon = 0;
   state.totalGpu = 0;
@@ -687,7 +707,7 @@ function startMining(idx) {
       currentState.earnedGpu = currentState.totalGpu;
       renderCard(idx);
       saveGameState();
-      if (typeof updateReferralCardsStatus === 'function') updateReferralCardsStatus();
+      updateReferralCardsStatus();
     }
   };
   
@@ -717,8 +737,9 @@ function renderCard(idx) {
     card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info"><h3>${gpu.name}</h3><button class="claim-btn claim-gpu" data-index="${idx}">🎁 Забрать ${state.totalTon} TON + ${state.totalGpu} GPU</button></div>`;
     card.querySelector('.claim-gpu').onclick = () => claimGPU(idx);
   } else {
-    const isReferralCard = gpu.requiredFriends !== undefined;
-    card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info"><h3>${gpu.name}</h3><div class="rewards-info"><span>+${gpu.tonReward} TON</span><span>+${gpu.gpuReward} GPU</span></div>${!isReferralCard && gpu.price > 0 ? `<button class="buy-btn" data-index="${idx}">Купить ${gpu.price} TON</button>` : '<div style="font-size:11px; color:#6B7CA8;">⭐ Реферальная карта</div>'}</div>`;
+    const isReferralCard = gpu.requiredActive !== undefined;
+    const priceText = gpu.priceCurrency === 'gpu' ? `${gpu.price} GPU` : `${gpu.price} TON`;
+    card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info"><h3>${gpu.name}</h3><div class="rewards-info"><span>💰 +${gpu.tonReward} TON</span><span>⚡ +${gpu.gpuReward} GPU</span></div>${!isReferralCard && gpu.price > 0 ? `<button class="buy-btn" data-index="${idx}">Купить за ${priceText}</button>` : '<div style="font-size:11px; color:#6B7CA8;">⭐ Реферальная карта</div>'}</div>`;
     if (!isReferralCard && gpu.price > 0) card.querySelector('.buy-btn').onclick = () => buyGPU(idx);
   }
 }
@@ -730,7 +751,7 @@ function initGrid() {
   if (!grid) return;
   grid.innerHTML = "";
   for (let i = 0; i < gpuTemplates.length; i++) {
-    if (gpuTemplates[i].requiredFriends !== undefined) continue;
+    if (gpuTemplates[i].requiredActive !== undefined) continue;
     const card = document.createElement("div");
     card.className = "card";
     card.id = `card_${i}`;
@@ -745,7 +766,7 @@ function showPayInfo(deposit) {
 
 function copyText(text) { navigator.clipboard.writeText(text); tg.showAlert("📋 Скопировано"); }
 
-// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК С ОБНОВЛЕНИЕМ БАЛАНСА ==========
+// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ==========
 window.openTab = async function(id, btn) {
     await refreshBalanceForAnyAction();
     
@@ -757,12 +778,11 @@ window.openTab = async function(id, btn) {
     if (id === "referral") {
         await loadReferrals();
         updateRefLink();
+        updateReferralCardsStatus();
     }
     if (id === "wallet") {
         renderHistory();
     }
-    
-    console.log(`🔄 Данные обновлены при переходе на вкладку: ${id}`);
 };
 
 function keepAlive() { setInterval(async () => { try { await fetch(API_URL, { method: 'HEAD' }); } catch(e) {} }, 4 * 60 * 1000); }
