@@ -371,7 +371,6 @@ async function checkAndActivateReferralCards() {
       renderCard(i);
       startMining(i);
       await saveGameState();
-      // Без лишних сообщений
     }
   }
   updateReferralCardsStatus();
@@ -398,8 +397,11 @@ function updateReferralCardsStatus() {
       if (cardState && cardState.active) {
         // Активно майнит - показываем прогресс-бар
         statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">${cardState.earnedTon.toFixed(2)}/${cardState.totalTon} TON</div></div>`;
+      } else if (cardState && cardState.totalTon > 0 && !cardState.active && cardState.earnedTon >= cardState.totalTon - 0.01) {
+        // МАЙНИНГ ЗАВЕРШЁН - ПОКАЗЫВАЕМ КНОПКУ ЗАБРАТЬ
+        statusDiv.innerHTML = `<button class="claim-btn claim-ref-reward" data-index="${tier.index}">🎁 Забрать ${cardState.totalTon} TON + ${cardState.totalGpu} GPU</button>`;
       } else if (cardState && !cardState.active && cardState.totalTon === 0) {
-        // Первый запуск
+        // Первый запуск - активируем
         cardState.active = true;
         cardState.totalTon = tier.rewardTon;
         cardState.totalGpu = tier.rewardGpu;
@@ -412,10 +414,15 @@ function updateReferralCardsStatus() {
         saveGameState();
         statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">0/${cardState.totalTon} TON</div></div>`;
       } else if (cardState && !cardState.active && cardState.totalTon > 0) {
-        // Завершён майнинг - показываем кнопку "Забрать"
-        statusDiv.innerHTML = `<button class="claim-btn claim-ref-reward" data-index="${tier.index}">🎁 Забрать ${cardState.totalTon} TON + ${cardState.totalGpu} GPU</button>`;
+        // Восстанавливаем майнинг
+        cardState.active = true;
+        cardState.startedAt = Date.now();
+        renderCard(tier.index);
+        startMining(tier.index);
+        saveGameState();
+        statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">${cardState.earnedTon.toFixed(2)}/${cardState.totalTon} TON</div></div>`;
       } else {
-        statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">0/${cardState?.totalTon || tier.rewardTon} TON</div></div>`;
+        statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">0/${tier.rewardTon} TON</div></div>`;
       }
     } else {
       container.classList.add("locked-card");
@@ -423,6 +430,7 @@ function updateReferralCardsStatus() {
     }
   }
   
+  // ПРИВЯЗЫВАЕМ ОБРАБОТЧИКИ К КНОПКАМ
   document.querySelectorAll('.claim-ref-reward').forEach(btn => {
     btn.removeEventListener('click', handleClaimReward);
     btn.addEventListener('click', handleClaimReward);
@@ -431,51 +439,57 @@ function updateReferralCardsStatus() {
 
 async function handleClaimReward(e) {
   const cardIndex = parseInt(e.currentTarget.getAttribute('data-index'));
+  console.log("🔧 Нажата кнопка Забрать для карты:", cardIndex);
   await claimReferralReward(cardIndex);
 }
 
 // ========== БЕСШУМНЫЙ РЕФЕРАЛЬНЫЙ ФАРМ ==========
 async function claimReferralReward(cardIndex) {
+  console.log("🎁 claimReferralReward вызван для карты:", cardIndex);
+  
   await syncBalance();
   
   const state = gpuStates[cardIndex];
-  const card = gpuTemplates[cardIndex];
-  
-  // Проверяем, завершён ли майнинг
-  if (!state || state.earnedTon < state.totalTon - 0.01) {
-    return; // Тихо выходим
+  if (!state) {
+    console.log("❌ state не найден");
+    return;
   }
   
-  // Останавливаем старый таймер
+  console.log("Состояние карты:", {
+    earnedTon: state.earnedTon,
+    totalTon: state.totalTon,
+    active: state.active
+  });
+  
+  if (state.earnedTon < state.totalTon - 0.01) {
+    tg.showAlert("⏳ Майнинг ещё не завершён");
+    return;
+  }
+  
   if (miningIntervals[cardIndex]) {
     clearInterval(miningIntervals[cardIndex]);
     miningIntervals[cardIndex] = null;
   }
   
-  // ЗАСЧИТЫВАЕМ НАГРАДУ
+  // Начисляем награду
   playerData.ton += state.totalTon;
   playerData.gpuTokens += state.totalGpu;
   
-  // СРАЗУ ЗАПУСКАЕМ НОВЫЙ ЦИКЛ МАЙНИНГА
-  state.startedAt = Date.now();
+  // Сбрасываем и запускаем новый цикл
   state.earnedTon = 0;
   state.earnedGpu = 0;
-  // state.totalTon и state.totalGpu остаются теми же
+  state.startedAt = Date.now();
+  state.active = true;
   
-  // Обновляем интерфейс
   updateUI();
   renderCard(cardIndex);
-  
-  // Запускаем майнинг заново
   startMining(cardIndex);
-  
-  // Сохраняем состояние на сервер
   await saveGameState();
   
-  // Обновляем статус карт (без лишних сообщений)
+  // Обновляем статус (кнопка исчезнет, появится прогресс-бар)
   updateReferralCardsStatus();
   
-  // БЕЗ АЛЕРТОВ, БЕЗ СООБЩЕНИЙ - просто продолжаем фармить
+  console.log("✅ Награда зачислена, новый цикл запущен");
 }
 
 // ========== РАБОТА С БЭКЕНДОМ ==========
@@ -509,7 +523,6 @@ async function loadUserData(referrerId = null) {
       ton: result.data.ton, 
       gpuTokens: result.data.gpu, 
       friends: result.data.friends, 
-      // invitedFriends: result.data.invitedFriends || [],  // НЕ ТРОГАЕМ СПИСОК ДРУЗЕЙ
       transactions: result.data.transactions || [] 
     };
     
@@ -520,7 +533,6 @@ async function loadUserData(referrerId = null) {
     }
     
     updateUI();
-    // renderFriendsList();  // НЕ ТРОГАЕМ СПИСОК ДРУЗЕЙ
     renderHistory();
     renderAllCards();
     startAllMinings();
