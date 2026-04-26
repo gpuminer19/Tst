@@ -698,6 +698,16 @@ mongoose.connection.once('open', async () => {
   }
 });
 
+// ВРЕМЕННО - ДЛЯ УДАЛЕНИЯ ПОЛЬЗОВАТЕЛЕЙ
+app.get('/clearusers', async (req, res) => {
+  try {
+    const result = await User.deleteMany({});
+    res.send(`✅ Удалено пользователей: ${result.deletedCount}`);
+  } catch (error) {
+    res.send(`❌ Ошибка: ${error.message}`);
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 mongoose.connect(process.env.MONGODB_URL).then(async () => {
   console.log('✅ Connected to MongoDB');
