@@ -26,7 +26,7 @@
   .gpu-currency { background: linear-gradient(135deg, #FFB347, #FF8C00); border-radius: 30px; padding: 2px 6px; font-size: 9px; font-weight: bold; color: #1A1F2E; display: inline-flex; align-items: center; gap: 2px; }
   .grid { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
   .card { background: rgba(12, 18, 32, 0.75); backdrop-filter: blur(12px); border-radius: 24px; padding: 12px; display: flex; gap: 12px; align-items: center; border: 1px solid rgba(0, 212, 255, 0.2); }
-  .gpu-img { width: 65px; height: 65px; object-fit: contain; background: rgba(0, 0, 0, 0.4); border-radius: 18px; padding: 8px; }
+  .gpu-img { width: 98px; height: 98px; object-fit: contain; background: rgba(0, 0, 0, 0.4); border-radius: 18px; padding: 3px; }
   .card-info { flex: 1; }
   .card-info h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
   .badge { background: rgba(0, 212, 255, 0.2); padding: 2px 6px; border-radius: 20px; font-size: 8px; color: #00D4FF; }
@@ -105,14 +105,14 @@
 
   <div class="balance-container">
     <div class="balance-card">
-      <div class="balance-label">💰 TON Balance</div>
+      <div class="balance-label">TON Balance</div>
       <div class="balance-value">
         <span id="ton">0</span>
         <img src="ton.png" class="currency-icon">
       </div>
     </div>
     <div class="balance-card">
-      <div class="balance-label">⚡ GPU Tokens</div>
+      <div class="balance-label">GPU Tokens</div>
       <div class="balance-value">
         <span id="gpuBalance">0</span>
         <img src="gpu.png" style="width: 20px; height: 20px; margin-left: 4px;">
@@ -131,9 +131,9 @@
     <div class="friend-count" id="friendCount">0</div>
     <div class="badge" style="display:inline-block; margin-top:4px; line-height:1.4;">
       🎁 РЕФЕРАЛЬНЫЕ БОНУСЫ:<br>
-      👥 BASIC GPU: 5 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"><br>
-      🔥 ULTRA GPU: 5 друзей по 500 <img src="gpu.png" style="width: 10px; height: 10px;"><br>
-      💎 LEGENDARY GPU: 5 друзей по 2000 <img src="gpu.png" style="width: 10px; height: 10px;">
+      🤝 Friend Miner: 10 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"><br>
+      👥 Bro Miner: 50 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"><br>
+      💎 Nexus Miner: 150 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;">
     </div>
     <div class="friends-list" id="friendsList">
       <div style="text-align:center; padding:20px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>
@@ -142,28 +142,28 @@
 
   <div class="referral-cards-grid">
     <div class="card" id="refCardBasic" style="border-color:#FFB347;">
-      <img src="8.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFB347);">
+      <img src="friendminer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFB347);">
       <div class="card-info">
-        <h3>👥 BASIC GPU <span class="badge" style="background:#FF8C20;">5 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
-        <div class="rewards-info"><span>💰 +1 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>⚡ +5 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 1 мин</span></div>
+        <h3>🤝 Friend Miner <span class="badge" style="background:#FF8C20;">10 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
+        <div class="rewards-info"><span>+1 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+5 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 1 мин</span></div>
         <div id="refCardBasicStatus"></div>
       </div>
     </div>
     
     <div class="card" id="refCardUltra" style="border-color:#00D4FF;">
-      <img src="8.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #00D4FF);">
+      <img src="brominer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #00D4FF);">
       <div class="card-info">
-        <h3>🔥 ULTRA GPU <span class="badge" style="background:#00D4FF;">5 друзей по 500 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
-        <div class="rewards-info"><span>💰 +5 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>⚡ +25 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 2 мин</span></div>
+        <h3>👥 Bro Miner <span class="badge" style="background:#00D4FF;">50 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
+        <div class="rewards-info"><span>+5 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+25 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 2 мин</span></div>
         <div id="refCardUltraStatus"></div>
       </div>
     </div>
     
     <div class="card" id="refCardLegendary" style="border-color:#FFD700;">
-      <img src="8.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFD700);">
+      <img src="nexusminer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFD700);">
       <div class="card-info">
-        <h3>💎 LEGENDARY GPU <span class="badge" style="background:#FFD700; color:#0B0E1A;">5 друзей по 2000 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
-        <div class="rewards-info"><span>💰 +20 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>⚡ +100 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 5 мин</span></div>
+        <h3>💎 Nexus Miner <span class="badge" style="background:#FFD700; color:#0B0E1A;">150 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
+        <div class="rewards-info"><span>+20 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+100 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 5 мин</span></div>
         <div id="refCardLegendaryStatus"></div>
       </div>
     </div>
@@ -183,7 +183,7 @@
     <h3>💳 Пополнить баланс <img src="ton.png" style="width: 14px; height: 14px;"></h3>
     <label>Сумма пополнения (<img src="ton.png" style="width: 12px; height: 12px;">)</label>
     <input id="depositAmount" type="number" min="0.1" step="0.1" placeholder="Например, 5">
-    <button class="pay-btn" id="payBtn">💎 Оплатить</button>
+    <button class="pay-btn" id="payBtn"> Оплатить</button>
     <div id="payResult"></div>
     
     <hr>
@@ -239,17 +239,22 @@ let playerData = {
 let gpuStates = [];
 let miningIntervals = [];
 
-// ========== КАРТЫ ==========
+// ========== НОВЫЕ КАРТЫ С ОБНОВЛЁННЫМИ НАЗВАНИЯМИ ==========
 const gpuTemplates = [
-  { name: "RTX 2060", price: 2, priceCurrency: "ton", tonReward: 2.4, gpuReward: 4, durationMs: 120000 },
-  { name: "RTX 3060", price: 3, priceCurrency: "ton", tonReward: 3.6, gpuReward: 6, durationMs: 180000 },
-  { name: "EPIC GPU", price: 5, priceCurrency: "ton", tonReward: 6, gpuReward: 10, durationMs: 300000 },
-  { name: "ULTRA PRO GPU", price: 50, priceCurrency: "ton", tonReward: 60, gpuReward: 200, durationMs: 600000 },
-  { name: "LEGENDARY PRO GPU", price: 100, priceCurrency: "ton", tonReward: 120, gpuReward: 500, durationMs: 1200000 },
-  { name: "RTX 1060", price: 1, priceCurrency: "gpu", tonReward: 0, gpuReward: 5, durationMs: 60000 },
-  { name: "👥 BASIC GPU", price: 0, priceCurrency: "ref", tonReward: 1, gpuReward: 5, durationMs: 60000, requiredActive: 5, requiredEarned: 100, tier: "basic" },
-  { name: "🔥 ULTRA GPU", price: 0, priceCurrency: "ref", tonReward: 5, gpuReward: 25, durationMs: 120000, requiredActive: 5, requiredEarned: 500, tier: "ultra" },
-  { name: "💎 LEGENDARY GPU", price: 0, priceCurrency: "ref", tonReward: 20, gpuReward: 100, durationMs: 300000, requiredActive: 5, requiredEarned: 2000, tier: "legendary" }
+  // GPU-майнер (первый, только GPU)
+  { name: "Basic Miner", price: 1, priceCurrency: "gpu", tonReward: 0, gpuReward: 5, durationMs: 60000, image: "basicminer.png" },
+  
+  // Обычные майнеры (TON + GPU)
+  { name: "Normal Miner", price: 2, priceCurrency: "ton", tonReward: 2.4, gpuReward: 4, durationMs: 120000, image: "normalminer.png" },
+  { name: "Pro Miner", price: 3, priceCurrency: "ton", tonReward: 3.6, gpuReward: 6, durationMs: 180000, image: "prominer.png" },
+  { name: "Ultra Miner", price: 5, priceCurrency: "ton", tonReward: 6, gpuReward: 10, durationMs: 300000, image: "ultraminer.png" },
+  { name: "Legendary Miner", price: 50, priceCurrency: "ton", tonReward: 60, gpuReward: 200, durationMs: 600000, image: "legendaryminer.png" },
+  { name: "X Miner", price: 100, priceCurrency: "ton", tonReward: 120, gpuReward: 500, durationMs: 1200000, image: "xminer.png" },
+  
+  // Реферальные майнеры
+  { name: "Friend Miner", price: 0, priceCurrency: "ref", tonReward: 1, gpuReward: 5, durationMs: 60000, requiredActive: 10, requiredEarned: 100, tier: "basic", image: "friendminer.png" },
+  { name: "Bro Miner", price: 0, priceCurrency: "ref", tonReward: 5, gpuReward: 25, durationMs: 120000, requiredActive: 50, requiredEarned: 100, tier: "ultra", image: "brominer.png" },
+  { name: "Nexus Miner", price: 0, priceCurrency: "ref", tonReward: 20, gpuReward: 100, durationMs: 300000, requiredActive: 150, requiredEarned: 100, tier: "legendary", image: "nexusminer.png" }
 ];
 
 // ========== ОЧИСТКА ТАЙМЕРОВ ==========
@@ -308,9 +313,9 @@ function renderFriendsList() {
   const sortedFriends = [...playerData.invitedFriends].sort((a, b) => (b.earnedGpu || 0) - (a.earnedGpu || 0));
   
   const levels = [
-    { name: "BASIC GPU", required: 100, needed: 5 },
-    { name: "ULTRA GPU", required: 500, needed: 5 },
-    { name: "LEGENDARY GPU", required: 2000, needed: 5 }
+    { name: "Friend Miner", required: 100, needed: 10 },
+    { name: "Bro Miner", required: 100, needed: 50 },
+    { name: "Nexus Miner", required: 100, needed: 150 }
   ];
   
   let progressHtml = '<div style="background:rgba(0,0,0,0.3); border-radius:16px; padding:12px; margin-bottom:16px;">';
@@ -383,7 +388,7 @@ async function syncBalance() {
 
 // ========== АКТИВАЦИЯ РЕФЕРАЛЬНЫХ КАРТ ==========
 async function checkAndActivateReferralCards() {
-  for (let i = 7; i < gpuTemplates.length; i++) {
+  for (let i = 6; i < gpuTemplates.length; i++) {
     const card = gpuTemplates[i];
     const cardState = gpuStates[i];
     if (cardState && (cardState.active || cardState.totalTon > 0)) continue;
@@ -409,15 +414,18 @@ async function checkAndActivateReferralCards() {
 
 function updateReferralCardsStatus() {
   const tiers = [
-    { id: "refCardBasic", requiredEarned: 100, index: 7, rewardTon: 1, rewardGpu: 5, durationMs: 60000 },
-    { id: "refCardUltra", requiredEarned: 500, index: 8, rewardTon: 5, rewardGpu: 25, durationMs: 120000 },
-    { id: "refCardLegendary", requiredEarned: 2000, index: 9, rewardTon: 20, rewardGpu: 100, durationMs: 300000 }
+    { id: "refCardBasic", requiredEarned: 100, index: 6, rewardTon: 1, rewardGpu: 5, durationMs: 60000, image: "friendminer.png" },
+    { id: "refCardUltra", requiredEarned: 100, index: 7, rewardTon: 5, rewardGpu: 25, durationMs: 120000, image: "brominer.png" },
+    { id: "refCardLegendary", requiredEarned: 100, index: 8, rewardTon: 20, rewardGpu: 100, durationMs: 300000, image: "nexusminer.png" }
   ];
   
   for (const tier of tiers) {
     const container = document.getElementById(tier.id);
     const statusDiv = document.getElementById(`${tier.id}Status`);
     if (!container || !statusDiv) continue;
+    
+    const cardImg = container.querySelector('.gpu-img');
+    if (cardImg && tier.image) cardImg.src = tier.image;
     
     const activeCount = playerData.invitedFriends ? playerData.invitedFriends.filter(f => (f.earnedGpu || 0) >= tier.requiredEarned).length : 0;
     const cardState = gpuStates[tier.index];
@@ -428,7 +436,7 @@ function updateReferralCardsStatus() {
       if (cardState && cardState.active) {
         statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">${cardState.earnedTon.toFixed(2)}/${cardState.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"></div></div>`;
       } else if (cardState && cardState.totalTon > 0 && !cardState.active && cardState.earnedTon >= cardState.totalTon - 0.01) {
-        statusDiv.innerHTML = `<button class="claim-btn claim-ref-reward" data-index="${tier.index}">?? Забрать ${cardState.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"> + ${cardState.totalGpu} <img src="gpu.png" style="width: 10px; height: 10px;"></button>`;
+        statusDiv.innerHTML = `<button class="claim-btn claim-ref-reward" data-index="${tier.index}">🎁 Забрать ${cardState.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"> + ${cardState.totalGpu} <img src="gpu.png" style="width: 10px; height: 10px;"></button>`;
       } else if (cardState && !cardState.active && cardState.totalTon === 0) {
         cardState.active = true;
         cardState.totalTon = tier.rewardTon;
@@ -741,17 +749,19 @@ function renderCard(idx) {
   if (!card) return;
   const gpu = gpuTemplates[idx];
   const state = gpuStates[idx];
+  const cardImage = gpu.image || "8.png";
+  
   if (state.active) {
     const progress = (Date.now() - state.startedAt) / state.durationMs;
     const percent = Math.min(100, progress * 100);
-    card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info"><h3>${gpu.name} ⚡</h3><div class="progress-bar"><div class="progress-fill" id="fill_${idx}" style="width:${percent}%"></div><div class="progress-text" id="text_${idx}">${state.earnedTon.toFixed(2)}/${state.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"></div></div></div>`;
+    card.innerHTML = `<img src="${cardImage}" class="gpu-img"><div class="card-info"><h3>${gpu.name} ⚡</h3><div class="progress-bar"><div class="progress-fill" id="fill_${idx}" style="width:${percent}%"></div><div class="progress-text" id="text_${idx}">${state.earnedTon.toFixed(2)}/${state.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"></div></div></div>`;
   } else if (state.totalTon > 0 && state.earnedTon >= state.totalTon - 0.01) {
-    card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info"><h3>${gpu.name}</h3><button class="claim-btn claim-gpu" data-index="${idx}">🎁 Забрать ${state.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"> + ${state.totalGpu} <img src="gpu.png" style="width: 10px; height: 10px;"></button></div>`;
+    card.innerHTML = `<img src="${cardImage}" class="gpu-img"><div class="card-info"><h3>${gpu.name}</h3><button class="claim-btn claim-gpu" data-index="${idx}"> Забрать ${state.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"> + ${state.totalGpu} <img src="gpu.png" style="width: 10px; height: 10px;"></button></div>`;
     card.querySelector('.claim-gpu').onclick = () => claimGPU(idx);
   } else {
     const isReferralCard = gpu.requiredActive !== undefined;
     const priceText = gpu.priceCurrency === 'gpu' ? `${gpu.price} <img src="gpu.png" style="width: 10px; height: 10px;">` : `${gpu.price} <img src="ton.png" style="width: 10px; height: 10px;">`;
-    card.innerHTML = `<img src="8.png" class="gpu-img"><div class="card-info"><h3>${gpu.name}</h3><div class="rewards-info"><span>💰 +${gpu.tonReward} <img src="ton.png" style="width: 10px; height: 10px;"></span><span>⚡ +${gpu.gpuReward} <img src="gpu.png" style="width: 10px; height: 10px;"></span></div>${!isReferralCard && gpu.price > 0 ? `<button class="buy-btn" data-index="${idx}">Купить за ${priceText}</button>` : '<div style="font-size:11px; color:#6B7CA8;">⭐ Реферальная карта</div>'}</div>`;
+    card.innerHTML = `<img src="${cardImage}" class="gpu-img"><div class="card-info"><h3>${gpu.name}</h3><div class="rewards-info"><span> +${gpu.tonReward} <img src="ton.png" style="width: 10px; height: 10px;"></span><span> +${gpu.gpuReward} <img src="gpu.png" style="width: 10px; height: 10px;"></span></div>${!isReferralCard && gpu.price > 0 ? `<button class="buy-btn" data-index="${idx}">Купить за ${priceText}</button>` : '<div style="font-size:11px; color:#6B7CA8;">⭐ Реферальная карта</div>'}</div>`;
     if (!isReferralCard && gpu.price > 0) card.querySelector('.buy-btn').onclick = () => buyGPU(idx);
   }
 }
