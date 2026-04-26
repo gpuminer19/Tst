@@ -21,8 +21,8 @@ app.use(session({
 const userSchema = new mongoose.Schema({
   userId: { type: String, unique: true },
   name: String,
-  ton: { type: Number, default: 5.0 },
-  gpu: { type: Number, default: 0 },
+  ton: { type: Number, default: 0 },      // ИЗМЕНЕНО: было 5.0, стало 0
+  gpu: { type: Number, default: 15 },     // ИЗМЕНЕНО: было 0, стало 15
   friends: { type: Number, default: 0 },
   referrerId: String,
   isBanned: { type: Boolean, default: false },
@@ -153,8 +153,8 @@ app.post('/api/tg', async (req, res) => {
         user = new User({ 
           userId: user_id, 
           name: name || 'Игрок',
-          ton: 5.0,
-          gpu: 0,
+          ton: 0,          // ИЗМЕНЕНО: было 5.0
+          gpu: 15,         // ИЗМЕНЕНО: было 0
           friends: 0,
           invitedFriends: [],
           gameState: { cardStates: initialCardStates }
@@ -469,7 +469,6 @@ app.get('/admin/api/userCards/:userId', requireAuth, async (req, res) => {
   const user = await User.findOne({ userId: req.params.userId });
   const cardStates = user?.gameState?.cardStates || [];
   
-  // ОБНОВЛЁННЫЙ СПИСОК КАРТ ДЛЯ АДМИН-ПАНЕЛИ
   const cards = [
     { id: 0, name: "Basic Miner", owned: cardStates[0]?.owned || false },
     { id: 1, name: "Normal Miner", owned: cardStates[1]?.owned || false },
@@ -507,8 +506,6 @@ app.post('/admin/api/giveCard', requireAuth, async (req, res) => {
   
   await user.save();
   
-  // При выдаче реферальной карты начисляем earnedGpu рефереру
-  // Friend Miner (id=6) -> 15 GPU, Bro Miner (id=7) -> 100 GPU, Nexus Miner (id=8) -> 200 GPU
   if (cardId >= 6 && cardId <= 8) {
     const rewards = [15, 100, 200];
     const rewardGpu = rewards[cardId - 6];
@@ -687,6 +684,16 @@ app.post('/api/bot/registerRef', async (req, res) => {
   }
 });
 
+// ========== ВРЕМЕННЫЙ ЭНДПОИНТ ДЛЯ ОЧИСТКИ ПОЛЬЗОВАТЕЛЕЙ ==========
+app.get('/clearusers', async (req, res) => {
+  try {
+    const result = await User.deleteMany({});
+    res.send(`✅ Удалено пользователей: ${result.deletedCount}`);
+  } catch (error) {
+    res.send(`❌ Ошибка: ${error.message}`);
+  }
+});
+
 // ========== ИНДЕКСЫ MONGODB ==========
 mongoose.connection.once('open', async () => {
   try {
@@ -695,16 +702,6 @@ mongoose.connection.once('open', async () => {
     console.log('✅ Индексы MongoDB созданы');
   } catch (err) {
     console.error("Ошибка создания индексов:", err);
-  }
-});
-
-// ВРЕМЕННО - ДЛЯ УДАЛЕНИЯ ПОЛЬЗОВАТЕЛЕЙ
-app.get('/clearusers', async (req, res) => {
-  try {
-    const result = await User.deleteMany({});
-    res.send(`✅ Удалено пользователей: ${result.deletedCount}`);
-  } catch (error) {
-    res.send(`❌ Ошибка: ${error.message}`);
   }
 });
 
