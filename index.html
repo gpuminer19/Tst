@@ -576,7 +576,8 @@ async function claimReward(idx) {
     await saveGameState();
     await refreshBalanceForAnyAction();
     
-    }
+    // ⚠️ ВНИМАНИЕ: Эндпоинт updateFriendEarned УДАЛЁН (безопасность)
+    // Начисление GPU рефералам теперь происходит только через сервер
     
     tg.showAlert(`🎉 Вы получили ${gpu.tonReward} TON и ${gpu.gpuReward} GPU! Следующая награда через 12 часов.`);
   } catch (error) {
