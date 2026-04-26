@@ -28,7 +28,12 @@ const userSchema = new mongoose.Schema({
   isBanned: { type: Boolean, default: false },
   banReason: String,
   role: { type: String, default: 'user' },
-  invitedFriends: [{ friendId: String, friendName: String, date: String }],
+  invitedFriends: [{ 
+    friendId: String, 
+    friendName: String, 
+    date: String,
+    earnedGpu: { type: Number, default: 0 }
+  }],
   gameState: { type: Object, default: {} },
   createdAt: { type: Date, default: Date.now },
   lastSeen: Date,
@@ -107,7 +112,12 @@ app.post('/api/tg', async (req, res) => {
         if (referrer_id && referrer_id !== user_id) {
           const referrer = await User.findOne({ userId: referrer_id });
           if (referrer && !referrer.isBanned) {
-            referrer.invitedFriends.push({ friendId: user_id, friendName: name, date: new Date().toLocaleDateString() });
+            referrer.invitedFriends.push({ 
+              friendId: user_id, 
+              friendName: name, 
+              date: new Date().toLocaleDateString(),
+              earnedGpu: 0
+            });
             referrer.friends = referrer.invitedFriends.length;
             await referrer.save();
           }
@@ -125,6 +135,7 @@ app.post('/api/tg', async (req, res) => {
           friends: user.friends,
           isBanned: user.isBanned,
           state: user.gameState || {},
+          invitedFriends: user.invitedFriends || [],
           transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
         }
       });
@@ -136,10 +147,15 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true });
     }
     
-    // РЕФЕРАЛЫ
+    // РЕФЕРАЛЫ (возвращаем с earnedGpu)
     if (action === 'getReferrals') {
       const user = await User.findOne({ userId: user_id });
-      return res.json({ success: true, referrals: user?.invitedFriends.map(f => ({ friend_name: f.friendName, date: f.date })) || [] });
+      const referrals = (user?.invitedFriends || []).map(f => ({ 
+        friend_name: f.friendName, 
+        date: f.date,
+        earnedGpu: f.earnedGpu || 0
+      }));
+      return res.json({ success: true, referrals });
     }
     
     // ПОПОЛНЕНИЕ
@@ -174,6 +190,23 @@ app.post('/api/tg', async (req, res) => {
       await withdrawRequest.save();
       
       return res.json({ success: true, message: 'Withdraw request created', pendingCount: pendingCount + 1 });
+    }
+    
+    // ========== ОБНОВЛЕНИЕ СТАТИСТИКИ РЕФЕРАЛА ==========
+    if (action === 'updateFriendEarned') {
+      const { earnedGpu } = req.body;
+      
+      // Находим пользователя, который пригласил этого человека
+      const referrer = await User.findOne({ "invitedFriends.friendId": user_id });
+      if (referrer) {
+        const friend = referrer.invitedFriends.find(f => f.friendId === user_id);
+        if (friend) {
+          friend.earnedGpu = (friend.earnedGpu || 0) + earnedGpu;
+          await referrer.save();
+          console.log(`📊 Реферер ${referrer.userId}: друг ${user_id} заработал +${earnedGpu} GPU (всего ${friend.earnedGpu})`);
+        }
+      }
+      return res.json({ success: true });
     }
     
     return res.status(400).json({ success: false, error: 'Unknown action' });
@@ -214,6 +247,7 @@ app.post('/admin/login', async (req, res) => {
   }
 });
 
+// ГЛАВНАЯ АДМИН-ПАНЕЛЬ
 app.get('/admin', requireAuth, async (req, res) => {
   const users = await User.find().sort({ createdAt: -1 });
   const pendingDeposits = await Deposit.find({ status: 'pending', type: 'deposit' }).sort('-createdAt');
@@ -293,31 +327,26 @@ app.post('/api/bot/registerRef', async (req, res) => {
   const { userId, referrerId } = req.body;
   
   try {
-    // Проверяем, не зарегистрирован ли уже этот пользователь
     const existingUser = await User.findOne({ userId: userId });
     if (existingUser) {
-      // Если пользователь уже есть, реферал всё равно засчитываем? 
-      // Решайте сами: я сделаю "нет"
       return res.json({ success: false, error: 'User already exists' });
     }
     
-    // Находим реферера (того, кто пригласил)
     const referrer = await User.findOne({ userId: referrerId });
     if (!referrer) {
       return res.json({ success: false, error: 'Referrer not found' });
     }
     
-    // Проверяем, не приглашал ли он уже этого пользователя
     const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === userId);
     if (alreadyInvited) {
       return res.json({ success: false, error: 'Already invited' });
     }
     
-    // Добавляем друга к рефереру
     referrer.invitedFriends.push({
       friendId: userId,
       friendName: `User_${userId.slice(-5)}`,
-      date: new Date().toLocaleDateString()
+      date: new Date().toLocaleDateString(),
+      earnedGpu: 0
     });
     referrer.friends = referrer.invitedFriends.length;
     await referrer.save();
