@@ -60,7 +60,6 @@ const adminSchema = new mongoose.Schema({
   role: { type: String, default: 'admin' }
 });
 
-// ========== СХЕМЫ ЗАДАНИЙ ==========
 const taskSchema = new mongoose.Schema({
   id: { type: String, unique: true },
   title: String,
@@ -327,7 +326,6 @@ app.post('/admin/login', async (req, res) => {
   }
 });
 
-// ГЛАВНАЯ АДМИН-ПАНЕЛЬ
 app.get('/admin', requireAuth, async (req, res) => {
   const users = await User.find().sort({ createdAt: -1 });
   const pendingDeposits = await Deposit.find({ status: 'pending', type: 'deposit' }).sort('-createdAt');
