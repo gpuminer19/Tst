@@ -371,7 +371,7 @@ async function checkAndActivateReferralCards() {
       renderCard(i);
       startMining(i);
       await saveGameState();
-      tg.showAlert(`⭐ ${card.name} активирована! Она будет майнить ${card.durationMs / 60000} мин.`);
+      // Без лишних сообщений
     }
   }
   updateReferralCardsStatus();
@@ -380,9 +380,9 @@ async function checkAndActivateReferralCards() {
 function updateReferralCardsStatus() {
   const friendCount = playerData.friends;
   const tiers = [
-    { id: "refCardBasic", required: 10, index: gpuTemplates.findIndex(c => c.tier === "basic") },
-    { id: "refCardUltra", required: 50, index: gpuTemplates.findIndex(c => c.tier === "ultra") },
-    { id: "refCardLegendary", required: 150, index: gpuTemplates.findIndex(c => c.tier === "legendary") }
+    { id: "refCardBasic", required: 10, index: 4, rewardTon: 1, rewardGpu: 5 },
+    { id: "refCardUltra", required: 50, index: 5, rewardTon: 5, rewardGpu: 25 },
+    { id: "refCardLegendary", required: 150, index: 6, rewardTon: 20, rewardGpu: 100 }
   ];
   
   for (const tier of tiers) {
@@ -390,14 +390,32 @@ function updateReferralCardsStatus() {
     const statusDiv = document.getElementById(`${tier.id}Status`);
     if (!container || !statusDiv) continue;
     
+    const cardState = gpuStates[tier.index];
+    
     if (friendCount >= tier.required) {
       container.classList.remove("locked-card");
-      if (tier.index !== -1 && gpuStates[tier.index] && gpuStates[tier.index].active) {
-        statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">Майнинг...</div></div>`;
-      } else if (tier.index !== -1 && gpuStates[tier.index] && gpuStates[tier.index].totalTon > 0) {
-        statusDiv.innerHTML = `<button class="claim-btn claim-ref-reward" data-index="${tier.index}">🎁 Забрать награду</button>`;
+      
+      if (cardState && cardState.active) {
+        // Активно майнит - показываем прогресс-бар
+        statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">${cardState.earnedTon.toFixed(2)}/${cardState.totalTon} TON</div></div>`;
+      } else if (cardState && !cardState.active && cardState.totalTon === 0) {
+        // Первый запуск
+        cardState.active = true;
+        cardState.totalTon = tier.rewardTon;
+        cardState.totalGpu = tier.rewardGpu;
+        cardState.earnedTon = 0;
+        cardState.earnedGpu = 0;
+        cardState.startedAt = Date.now();
+        cardState.durationMs = tier.rewardTon === 1 ? 60000 : (tier.rewardTon === 5 ? 120000 : 300000);
+        renderCard(tier.index);
+        startMining(tier.index);
+        saveGameState();
+        statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">0/${cardState.totalTon} TON</div></div>`;
+      } else if (cardState && !cardState.active && cardState.totalTon > 0) {
+        // Завершён майнинг - показываем кнопку "Забрать"
+        statusDiv.innerHTML = `<button class="claim-btn claim-ref-reward" data-index="${tier.index}">🎁 Забрать ${cardState.totalTon} TON + ${cardState.totalGpu} GPU</button>`;
       } else {
-        statusDiv.innerHTML = `<div style="color:#00A86B;">✅ Доступна! Активируется автоматически...</div>`;
+        statusDiv.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="fill_${tier.index}"></div><div class="progress-text" id="text_${tier.index}">0/${cardState?.totalTon || tier.rewardTon} TON</div></div>`;
       }
     } else {
       container.classList.add("locked-card");
@@ -416,38 +434,48 @@ async function handleClaimReward(e) {
   await claimReferralReward(cardIndex);
 }
 
+// ========== БЕСШУМНЫЙ РЕФЕРАЛЬНЫЙ ФАРМ ==========
 async function claimReferralReward(cardIndex) {
   await syncBalance();
   
   const state = gpuStates[cardIndex];
+  const card = gpuTemplates[cardIndex];
+  
+  // Проверяем, завершён ли майнинг
   if (!state || state.earnedTon < state.totalTon - 0.01) {
-    tg.showAlert("⏳ Майнинг ещё не завершён");
-    return;
+    return; // Тихо выходим
   }
   
+  // Останавливаем старый таймер
   if (miningIntervals[cardIndex]) {
     clearInterval(miningIntervals[cardIndex]);
     miningIntervals[cardIndex] = null;
   }
   
+  // ЗАСЧИТЫВАЕМ НАГРАДУ
   playerData.ton += state.totalTon;
   playerData.gpuTokens += state.totalGpu;
-  state.active = false;
-  state.totalTon = 0;
-  state.totalGpu = 0;
+  
+  // СРАЗУ ЗАПУСКАЕМ НОВЫЙ ЦИКЛ МАЙНИНГА
+  state.startedAt = Date.now();
   state.earnedTon = 0;
   state.earnedGpu = 0;
-  state.startedAt = 0;
-  state.durationMs = 0;
+  // state.totalTon и state.totalGpu остаются теми же
   
+  // Обновляем интерфейс
   updateUI();
   renderCard(cardIndex);
+  
+  // Запускаем майнинг заново
+  startMining(cardIndex);
+  
+  // Сохраняем состояние на сервер
   await saveGameState();
   
-  // Обновляем статус реферальных карт (НЕ ТРОГАЕМ СПИСОК ДРУЗЕЙ)
+  // Обновляем статус карт (без лишних сообщений)
   updateReferralCardsStatus();
   
-  tg.showAlert(`🎉 Вы получили ${state.totalTon} TON и ${state.totalGpu} GPU!`);
+  // БЕЗ АЛЕРТОВ, БЕЗ СООБЩЕНИЙ - просто продолжаем фармить
 }
 
 // ========== РАБОТА С БЭКЕНДОМ ==========
@@ -474,7 +502,6 @@ async function apiRequest(action, additionalData = {}) {
   } catch (error) { console.error(error); tg.showAlert("❌ Ошибка связи"); return null; }
 }
 
-// ========== ИСПРАВЛЕННАЯ ФУНКЦИЯ ЗАГРУЗКИ ДАННЫХ (ВОССТАНАВЛИВАЕТ КАРТЫ) ==========
 async function loadUserData(referrerId = null) {
   const result = await apiRequest("register", { referrer_id: referrerId });
   if (result?.success && result.data) {
@@ -482,23 +509,21 @@ async function loadUserData(referrerId = null) {
       ton: result.data.ton, 
       gpuTokens: result.data.gpu, 
       friends: result.data.friends, 
-      invitedFriends: result.data.invitedFriends || [], 
+      // invitedFriends: result.data.invitedFriends || [],  // НЕ ТРОГАЕМ СПИСОК ДРУЗЕЙ
       transactions: result.data.transactions || [] 
     };
     
-    // ========== ВОССТАНАВЛИВАЕМ СОСТОЯНИЕ КАРТ С СЕРВЕРА ==========
     if (result.data.state && result.data.state.gpuStates) {
       gpuStates = result.data.state.gpuStates;
-      console.log("🔄 Состояние карт восстановлено с сервера");
     } else {
       initGpuStates();
     }
     
     updateUI();
-    renderFriendsList();
+    // renderFriendsList();  // НЕ ТРОГАЕМ СПИСОК ДРУЗЕЙ
     renderHistory();
-    renderAllCards();    // Перерисовываем карты
-    startAllMinings();   // Запускаем майнинг активных карт
+    renderAllCards();
+    startAllMinings();
     await checkAndActivateReferralCards();
     return true;
   }
