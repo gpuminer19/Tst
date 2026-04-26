@@ -305,6 +305,7 @@ let playerData = {
 // ========== НОВАЯ СТРУКТУРА КАРТ (вечный фарм) ==========
 let cardStates = []; // owned, lastClaim, readyToClaim, intervalId
 let cardTimers = [];
+let isClaiming = []; // Защита от многократного нажатия
 
 // Шаблоны карт (цена, награда)
 const gpuTemplates = [
@@ -329,6 +330,7 @@ function initCardStates() {
     readyToClaim: false,
     intervalId: null
   }));
+  isClaiming = gpuTemplates.map(() => false);
 }
 
 // ========== ОЧИСТКА ВСЕХ ТАЙМЕРОВ ==========
@@ -481,21 +483,21 @@ function startRewardTimer(idx) {
     const timeSinceLastClaim = now - state.lastClaim;
     
     // Если прошло 10+ секунд и ещё не готово к забору
-    if (timeSinceLastClaim >= 10000 && !state.readyToClaim) {
+    if (timeSinceLastClaim >= 10000 && !state.readyToClaim && !isClaiming[idx]) {
       state.readyToClaim = true;
       renderCard(idx);
     }
     
     // Обновляем отображение таймера
     const timerElement = document.getElementById(`timer_${idx}`);
-    if (timerElement && !state.readyToClaim) {
+    if (timerElement && !state.readyToClaim && !isClaiming[idx]) {
       const remaining = Math.max(0, 10000 - timeSinceLastClaim);
       timerElement.innerHTML = `⏱ ${(remaining / 1000).toFixed(1)} сек`;
     }
     
     // Обновляем прогресс-бар
     const progressFill = document.getElementById(`progress_fill_${idx}`);
-    if (progressFill && !state.readyToClaim) {
+    if (progressFill && !state.readyToClaim && !isClaiming[idx]) {
       const progress = Math.min(100, (timeSinceLastClaim / 10000) * 100);
       progressFill.style.width = `${progress}%`;
     }
@@ -551,6 +553,12 @@ async function buyGPU(idx) {
 }
 
 async function claimReward(idx) {
+  // Защита от многократного нажатия
+  if (isClaiming[idx]) {
+    console.log("⏳ Уже обрабатывается запрос");
+    return;
+  }
+  
   const state = cardStates[idx];
   const gpu = gpuTemplates[idx];
   
@@ -559,23 +567,51 @@ async function claimReward(idx) {
     return;
   }
   
-  // Начисляем награду
-  playerData.ton += gpu.tonReward;
-  playerData.gpuTokens += gpu.gpuReward;
+  // Блокируем кнопку
+  isClaiming[idx] = true;
   
-  // Обновляем статистику для рефералов
-  if (gpu.gpuReward > 0) {
-    await apiRequest("updateFriendEarned", { earnedGpu: gpu.gpuReward });
+  // Находим кнопку и временно отключаем её
+  const card = document.getElementById(`card_${idx}`);
+  const claimBtn = card?.querySelector('.claim-btn');
+  if (claimBtn) {
+    claimBtn.disabled = true;
+    claimBtn.style.opacity = '0.5';
+    claimBtn.innerText = '⏳ Обработка...';
   }
   
-  // Сбрасываем таймер
-  state.lastClaim = Date.now();
-  state.readyToClaim = false;
-  
-  updateUI();
-  renderCard(idx);
-  await saveGameState();
-  await refreshBalanceForAnyAction();
+  try {
+    // Начисляем награду локально
+    playerData.ton += gpu.tonReward;
+    playerData.gpuTokens += gpu.gpuReward;
+    
+    // Обновляем состояние карты
+    state.lastClaim = Date.now();
+    state.readyToClaim = false;
+    
+    // Обновляем UI
+    updateUI();
+    renderCard(idx);
+    
+    // Сохраняем на сервер
+    await saveGameState();
+    await refreshBalanceForAnyAction();
+    
+    // Обновляем статистику для рефералов
+    if (gpu.gpuReward > 0) {
+      await apiRequest("updateFriendEarned", { earnedGpu: gpu.gpuReward });
+    }
+    
+    tg.showAlert(`🎉 Вы получили ${gpu.tonReward} TON и ${gpu.gpuReward} GPU!`);
+  } catch (error) {
+    console.error("Claim error:", error);
+    tg.showAlert("❌ Ошибка при получении награды");
+    // Восстанавливаем состояние при ошибке
+    state.readyToClaim = true;
+    renderCard(idx);
+  } finally {
+    // Разблокируем
+    isClaiming[idx] = false;
+  }
 }
 
 function renderCard(idx) {
@@ -616,7 +652,7 @@ function renderCard(idx) {
     `;
     const btn = card.querySelector('.buy-btn');
     if (btn && !btn.disabled) btn.onclick = () => buyGPU(idx);
-  } else if (state.readyToClaim) {
+  } else if (state.readyToClaim && !isClaiming[idx]) {
     // Награда готова к забору
     card.innerHTML = `
       <img src="${gpu.image || '8.png'}" class="gpu-img">
@@ -629,7 +665,21 @@ function renderCard(idx) {
         <button class="claim-btn" data-index="${idx}">🎁 Забрать награду!</button>
       </div>
     `;
-    card.querySelector('.claim-btn').onclick = () => claimReward(idx);
+    const btn = card.querySelector('.claim-btn');
+    if (btn) btn.onclick = () => claimReward(idx);
+  } else if (state.readyToClaim && isClaiming[idx]) {
+    // Показываем кнопку в заблокированном состоянии
+    card.innerHTML = `
+      <img src="${gpu.image || '8.png'}" class="gpu-img">
+      <div class="card-info">
+        <h3>${gpu.name} ⚡</h3>
+        <div class="rewards-info">
+          <span>+${gpu.tonReward} <img src="ton.png" style="width: 10px; height: 10px;"></span>
+          <span>+${gpu.gpuReward} <img src="gpu.png" style="width: 10px; height: 10px;"></span>
+        </div>
+        <button class="claim-btn" disabled style="opacity:0.5;">⏳ Обработка...</button>
+      </div>
+    `;
   } else {
     // Майнинг идёт, показываем таймер и прогресс
     const timeSince = Date.now() - state.lastClaim;
@@ -743,11 +793,11 @@ async function loadUserData(referrerId = null) {
     };
     
     // Восстанавливаем состояние карт
-    if (result.data.cardStates) {
-      for (let i = 0; i < result.data.cardStates.length; i++) {
-        if (result.data.cardStates[i].owned) {
+    if (result.data.state?.cardStates) {
+      for (let i = 0; i < result.data.state.cardStates.length; i++) {
+        if (result.data.state.cardStates[i].owned) {
           cardStates[i].owned = true;
-          cardStates[i].lastClaim = result.data.cardStates[i].lastClaim || Date.now();
+          cardStates[i].lastClaim = result.data.state.cardStates[i].lastClaim || Date.now();
         }
       }
     }
