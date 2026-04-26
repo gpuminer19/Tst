@@ -576,8 +576,6 @@ async function claimReward(idx) {
     await saveGameState();
     await refreshBalanceForAnyAction();
     
-    if (gpu.gpuReward > 0) {
-      await apiRequest("updateFriendEarned", { earnedGpu: gpu.gpuReward });
     }
     
     tg.showAlert(`🎉 Вы получили ${gpu.tonReward} TON и ${gpu.gpuReward} GPU! Следующая награда через 12 часов.`);
