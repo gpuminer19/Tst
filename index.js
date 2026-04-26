@@ -125,13 +125,19 @@ app.post('/api/tg', async (req, res) => {
     if (action === 'register') {
       let user = await User.findOne({ userId: user_id });
       if (!user) {
+        const initialCardStates = [];
+        for (let i = 0; i < 9; i++) {
+          initialCardStates.push({ owned: false, lastClaim: 0 });
+        }
+        
         user = new User({ 
           userId: user_id, 
           name: name || 'Игрок',
           ton: 5.0,
           gpu: 0,
           friends: 0,
-          invitedFriends: []
+          invitedFriends: [],
+          gameState: { cardStates: initialCardStates }
         });
         
         if (referrer_id && referrer_id !== user_id) {
@@ -159,7 +165,7 @@ app.post('/api/tg', async (req, res) => {
           gpu: user.gpu,
           friends: user.friends,
           isBanned: user.isBanned,
-          state: user.gameState || {},
+          state: user.gameState || { cardStates: [] },
           invitedFriends: user.invitedFriends || [],
           transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
         }
@@ -168,7 +174,11 @@ app.post('/api/tg', async (req, res) => {
     
     // СОХРАНЕНИЕ
     if (action === 'save') {
-      await User.findOneAndUpdate({ userId: user_id }, { ton, gpu, friends, gameState: state, lastSeen: new Date() }, { upsert: true });
+      await User.findOneAndUpdate(
+        { userId: user_id }, 
+        { ton, gpu, friends, gameState: state, lastSeen: new Date() }, 
+        { upsert: true }
+      );
       return res.json({ success: true });
     }
     
@@ -232,7 +242,6 @@ app.post('/api/tg', async (req, res) => {
     }
     
     // ========== ЗАДАНИЯ ==========
-    // Получить список активных заданий
     if (action === 'tasks/list') {
       const allTasks = await Task.find({ isActive: true }).sort({ order: 1 });
       const userCompleted = await UserTask.find({ userId: user_id, claimed: true });
@@ -258,7 +267,6 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, tasks });
     }
     
-    // Выполнить задание
     if (action === 'tasks/complete') {
       const task = await Task.findOne({ id: taskId });
       if (!task) return res.json({ success: false, error: 'Task not found' });
@@ -326,21 +334,25 @@ app.get('/admin', requireAuth, async (req, res) => {
   const pendingWithdraws = await Deposit.find({ status: 'pending', type: 'withdraw' }).sort('-createdAt');
   const totalUsers = users.length;
   const totalTon = users.reduce((sum, u) => sum + u.ton, 0);
-  const pendingTasks = await UserTask.find({ claimed: false }).populate('taskId');
+  const pendingTasks = await UserTask.find({ claimed: false });
   
   res.send(`<!DOCTYPE html>
   <html><head><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Dashboard</title>
-  <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0B0E1A;color:#fff;font-family:system-ui;padding:16px;padding-bottom:80px}.header{background:linear-gradient(135deg,#1A2A5E,#0F1A3A);border-radius:24px;padding:20px;margin-bottom:20px}.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px}.stat-card{background:rgba(26,31,53,0.9);border-radius:20px;padding:16px;text-align:center}.stat-value{font-size:28px;font-weight:bold;color:#00D4FF}.nav-tabs{display:flex;gap:4px;padding:12px;background:#0B0E1A;flex-wrap:wrap}.tab-btn{background:transparent;border:none;padding:10px 16px;border-radius:40px;color:#8EA3D4;cursor:pointer}.tab-btn.active{background:#00D4FF;color:#0B0E1A}.tab-content{display:none;padding:16px}.tab-content.active{display:block}.user-card,.deposit-card{background:rgba(0,0,0,0.3);border-radius:20px;padding:12px;margin-bottom:10px}.user-header{display:flex;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap}button{background:#1A2A5E;border:none;padding:8px 12px;border-radius:40px;color:#fff;cursor:pointer;margin:2px}.btn-success{background:#00A86B}.btn-danger{background:#DC2626}.btn-warning{background:#FF8C00}.search-box{width:100%;padding:12px;margin-bottom:16px;background:#0B0E1A;border:1px solid #00D4FF;border-radius:40px;color:#fff}.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(8,12,24,0.95);display:flex;justify-content:space-around;padding:10px}</style>
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0B0E1A;color:#fff;font-family:system-ui;padding:16px;padding-bottom:80px}.header{background:linear-gradient(135deg,#1A2A5E,#0F1A3A);border-radius:24px;padding:20px;margin-bottom:20px}.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px}.stat-card{background:rgba(26,31,53,0.9);border-radius:20px;padding:16px;text-align:center}.stat-value{font-size:28px;font-weight:bold;color:#00D4FF}.nav-tabs{display:flex;gap:4px;padding:12px;background:#0B0E1A;flex-wrap:wrap}.tab-btn{background:transparent;border:none;padding:10px 16px;border-radius:40px;color:#8EA3D4;cursor:pointer}.tab-btn.active{background:#00D4FF;color:#0B0E1A}.tab-content{display:none;padding:16px}.tab-content.active{display:block}.user-card,.deposit-card{background:rgba(0,0,0,0.3);border-radius:20px;padding:12px;margin-bottom:10px}.user-header{display:flex;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap}button{background:#1A2A5E;border:none;padding:8px 12px;border-radius:40px;color:#fff;cursor:pointer;margin:2px}.btn-success{background:#00A86B}.btn-danger{background:#DC2626}.btn-warning{background:#FF8C00}.btn-info{background:#00D4FF;color:#0B0E1A}.search-box{width:100%;padding:12px;margin-bottom:16px;background:#0B0E1A;border:1px solid #00D4FF;border-radius:40px;color:#fff}.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(8,12,24,0.95);display:flex;justify-content:space-around;padding:10px}</style>
   </head><body>
+  <div id="modalOverlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); justify-content:center; align-items:center; z-index:1000;">
+    <div id="modalContent" style="background:#1A1F35; border-radius:28px; padding:24px; max-width:500px; width:90%; max-height:80vh; overflow-y:auto;"></div>
+  </div>
+  
   <div class="header"><div style="display:flex;justify-content:space-between;"><h1>⚡ CryptoGPU</h1><a href="/admin/logout" style="color:#FF8C00;">Выйти</a></div></div>
   <div class="stats-grid"><div class="stat-card"><div class="stat-value">${totalUsers}</div><div>👥 Игроков</div></div><div class="stat-card"><div class="stat-value">${totalTon.toFixed(2)}</div><div>💰 TON</div></div><div class="stat-card"><div class="stat-value">${pendingDeposits.length}</div><div>💎 Пополнений</div></div><div class="stat-card"><div class="stat-value">${pendingWithdraws.length}</div><div>📤 Выводов</div></div></div>
   <div class="nav-tabs"><button class="tab-btn active" onclick="showTab('users')">👥 Пользователи</button><button class="tab-btn" onclick="showTab('deposits')">💎 Пополнения</button><button class="tab-btn" onclick="showTab('withdraws')">📤 Выводы</button><button class="tab-btn" onclick="showTab('tasks')">📋 Задания</button><button class="tab-btn" onclick="showTab('pending')">⏳ Ожидают</button></div>
   
-  <div id="tab-users" class="tab-content active"><input type="text" class="search-box" id="searchUsers" placeholder="🔍 Поиск..." onkeyup="filterUsers()"><div id="usersList">${users.map(u => `<div class="user-card" data-name="${u.name.toLowerCase()}" data-id="${u.userId}"><div class="user-header"><span><strong>${u.name}</strong> ${u.isBanned ? '🚫' : ''}</span><span style="font-size:11px;">${u.userId}</span></div><div>💰 ${u.ton.toFixed(2)} TON | ⚡ ${u.gpu} GPU | 👥 ${u.friends}</div><div style="margin-top:10px;"><button class="btn-warning" onclick="editBalance('${u.userId}', ${u.ton})">💰 Изменить баланс</button>${u.isBanned ? `<button class="btn-success" onclick="unbanUser('${u.userId}')">🔓 Разбанить</button>` : `<button class="btn-danger" onclick="banUser('${u.userId}')">🔒 Забанить</button>`}</div></div>`).join('')}</div></div>
+  <div id="tab-users" class="tab-content active"><input type="text" class="search-box" id="searchUsers" placeholder="🔍 Поиск..." onkeyup="filterUsers()"><div id="usersList">${users.map(u => `<div class="user-card" data-name="${u.name.toLowerCase()}" data-id="${u.userId}"><div class="user-header"><span><strong>${u.name}</strong> ${u.isBanned ? '🚫' : ''}</span><span style="font-size:11px;">${u.userId}</span></div><div>💰 ${u.ton.toFixed(2)} TON | ⚡ ${u.gpu} GPU | 👥 ${u.friends}</div><div style="margin-top:10px;"><button class="btn-warning" onclick="editBalance('${u.userId}', ${u.ton})">💰 Изменить баланс</button><button class="btn-info" onclick="viewUserCards('${u.userId}')">🃏 Карты</button><button class="btn-success" onclick="giveGpu('${u.userId}')">⚡ Выдать GPU</button><button class="btn-success" onclick="giveTon('${u.userId}')">💎 Выдать TON</button>${u.isBanned ? `<button class="btn-success" onclick="unbanUser('${u.userId}')">🔓 Разбанить</button>` : `<button class="btn-danger" onclick="banUser('${u.userId}')">🔒 Забанить</button>`}</div></div>`).join('')}</div></div>
   
   <div id="tab-deposits" class="tab-content">${pendingDeposits.map(d => `<div class="deposit-card"><div><strong>👤 ${d.userName}</strong> (${d.userId})</div><div style="font-size:20px;">${d.amount} TON</div><div style="font-size:11px;">${d.comment}</div><div style="display:flex;gap:8px;margin-top:10px;"><form method="POST" action="/admin/approve" style="flex:1;"><input type="hidden" name="id" value="${d._id}"><input type="hidden" name="type" value="deposit"><button type="submit" style="width:100%;background:#00A86B;">✅ Подтвердить</button></form><form method="POST" action="/admin/reject" style="flex:1;"><input type="hidden" name="id" value="${d._id}"><button type="submit" style="width:100%;background:#DC2626;">❌ Отклонить</button></form></div></div>`).join('') || '<p>Нет заявок</p>'}</div>
   
-  <div id="tab-withdraws" class="tab-content">${pendingWithdraws.map(w => `<div class="deposit-card"><div><strong>👤 ${w.userName}</strong> (${w.userId})</div><div style="font-size:20px;">${w.amount} TON</div><div style="font-size:11px;">📤 ${w.wallet}</div><div style="display:flex;gap:8px;margin-top:10px;"><form method="POST" action="/admin/approve" style="flex:1;"><input type="hidden" name="id" value="${w._id}"><input type="hidden" name="type" value="withdraw"><button type="submit" style="width:100%;background:#FF8C00;">💰 Подтвердить вывод</button></form><form method="POST" action="/admin/reject" style:inline;><input type="hidden" name="id" value="${w._id}"><button type="submit" style="width:100%;background:#DC2626;">❌ Отклонить</button></form></div></div>`).join('') || '<p>Нет заявок</p>'}</div>
+  <div id="tab-withdraws" class="tab-content">${pendingWithdraws.map(w => `<div class="deposit-card"><div><strong>👤 ${w.userName}</strong> (${w.userId})</div><div style="font-size:20px;">${w.amount} TON</div><div style="font-size:11px;">📤 ${w.wallet}</div><div style="display:flex;gap:8px;margin-top:10px;"><form method="POST" action="/admin/approve" style="flex:1;"><input type="hidden" name="id" value="${w._id}"><input type="hidden" name="type" value="withdraw"><button type="submit" style="width:100%;background:#FF8C00;">💰 Подтвердить вывод</button></form><form method="POST" action="/admin/reject" style="flex:1;"><input type="hidden" name="id" value="${w._id}"><button type="submit" style="width:100%;background:#DC2626;">❌ Отклонить</button></form></div></div>`).join('') || '<p>Нет заявок</p>'}</div>
   
   <div id="tab-tasks" class="tab-content"><button class="btn-success" onclick="showTaskModal()" style="margin-bottom:16px;">➕ Добавить задание</button><div id="tasksList"></div></div>
   
@@ -358,7 +370,49 @@ app.get('/admin', requireAuth, async (req, res) => {
     function banUser(id){if(confirm('Забанить?')){let r=prompt('Причина бана:');fetch('/admin/api/ban',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id,reason:r})}).then(()=>location.reload());}}
     function unbanUser(id){if(confirm('Разбанить?')){fetch('/admin/api/unban',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id})}).then(()=>location.reload());}}
     
-    // Задания
+    async function viewUserCards(userId){
+      const res=await fetch('/admin/api/userCards/'+userId);
+      const data=await res.json();
+      let cardsHtml='<div style="max-height:400px; overflow-y:auto;">';
+      for(const card of data.cards){
+        const statusStyle=card.owned?'color:#00A86B;':'color:#6B7CA8;';
+        const statusText=card.owned?'✅ Куплена':'🔒 Не куплена';
+        const giveButton=!card.owned?'<button class="btn-success" onclick="giveCard(\\''+userId+'\\','+card.id+')" style="margin-left:10px;">🎁 Выдать</button>':'';
+        cardsHtml+='<div class="user-card" style="display:flex; justify-content:space-between; align-items:center;"><span><strong>'+card.name+'</strong></span><span style="'+statusStyle+'">'+statusText+'</span>'+giveButton+'</div>';
+      }
+      cardsHtml+='</div>';
+      document.getElementById('modalContent').innerHTML='<h3>👤 '+data.user.name+'</h3><p>💰 TON: '+data.user.ton+' | ⚡ GPU: '+data.user.gpu+'</p>'+cardsHtml+'<button onclick="closeModal()" style="margin-top:16px;">Закрыть</button>';
+      document.getElementById('modalOverlay').style.display='flex';
+    }
+    
+    async function giveCard(userId,cardId){
+      if(!confirm('Выдать эту карту пользователю?')) return;
+      const res=await fetch('/admin/api/giveCard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,cardId})});
+      const result=await res.json();
+      if(result.success){alert('✅ Карта выдана!');viewUserCards(userId);}
+      else alert('❌ Ошибка: '+(result.error||'Неизвестная ошибка'));
+    }
+    
+    async function giveGpu(userId){
+      const amount=prompt('Введите количество GPU для выдачи:');
+      if(!amount||isNaN(parseInt(amount))) return;
+      const res=await fetch('/admin/api/giveGpu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount:parseInt(amount)})});
+      const result=await res.json();
+      if(result.success){alert('✅ Выдано '+amount+' GPU!');location.reload();}
+      else alert('❌ Ошибка');
+    }
+    
+    async function giveTon(userId){
+      const amount=prompt('Введите количество TON для выдачи:');
+      if(!amount||isNaN(parseFloat(amount))) return;
+      const res=await fetch('/admin/api/giveTon',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount:parseFloat(amount)})});
+      const result=await res.json();
+      if(result.success){alert('✅ Выдано '+amount+' TON!');location.reload();}
+      else alert('❌ Ошибка');
+    }
+    
+    function closeModal(){document.getElementById('modalOverlay').style.display='none';}
+    
     async function loadTasks(){const res=await fetch('/admin/api/tasks/list');const data=await res.json();const container=document.getElementById('tasksList');if(!container)return;container.innerHTML=data.tasks.map(t=>'<div class="user-card"><div><strong>'+t.title+'</strong> - '+t.description+'</div><div>💰 +'+t.rewardTon+' TON | ⚡ +'+t.rewardGpu+' GPU | '+(t.isDaily?'Ежедневное':'Одноразовое')+'</div><div style="margin-top:10px;"><button class="btn-warning" onclick="editTask(\\''+t.id+'\\')">✏️ Редактировать</button><button class="btn-danger" onclick="deleteTask(\\''+t.id+'\\')">🗑️ Удалить</button></div></div>').join('');}
     
     async function loadPendingTasks(){const res=await fetch('/admin/api/tasks/pending');const data=await res.json();const container=document.getElementById('pendingTasksList');if(!container)return;if(data.tasks.length===0){container.innerHTML='<p>Нет заданий на подтверждение</p>';return;}container.innerHTML=data.tasks.map(t=>'<div class="deposit-card"><div><strong>👤 '+t.userName+'</strong> ('+t.userId+')</div><div>📋 Задание: '+t.taskTitle+'</div><div>💰 Награда: +'+t.rewardTon+' TON | ⚡ +'+t.rewardGpu+' GPU</div><div style="margin-top:10px;"><button class="btn-success" onclick="approveTask(\\''+t.userTaskId+'\\')">✅ Подтвердить</button></div></div>').join('');}
@@ -388,6 +442,78 @@ app.post('/admin/api/ban', requireAuth, async (req, res) => {
 
 app.post('/admin/api/unban', requireAuth, async (req, res) => {
   await User.findOneAndUpdate({ userId: req.body.userId }, { isBanned: false, banReason: null });
+  res.json({ success: true });
+});
+
+// ========== Админ API для карт и токенов ==========
+app.get('/admin/api/userCards/:userId', requireAuth, async (req, res) => {
+  const user = await User.findOne({ userId: req.params.userId });
+  const cardStates = user?.gameState?.cardStates || [];
+  
+  const cards = [
+    { id: 0, name: "Basic Miner", owned: cardStates[0]?.owned || false },
+    { id: 1, name: "Normal Miner", owned: cardStates[1]?.owned || false },
+    { id: 2, name: "Pro Miner", owned: cardStates[2]?.owned || false },
+    { id: 3, name: "Ultra Miner", owned: cardStates[3]?.owned || false },
+    { id: 4, name: "Legendary Miner", owned: cardStates[4]?.owned || false },
+    { id: 5, name: "X Miner", owned: cardStates[5]?.owned || false },
+    { id: 6, name: "Friend Miner", owned: cardStates[6]?.owned || false },
+    { id: 7, name: "Bro Miner", owned: cardStates[7]?.owned || false },
+    { id: 8, name: "Nexus Miner", owned: cardStates[8]?.owned || false }
+  ];
+  
+  res.json({ cards, user: { name: user.name, ton: user.ton, gpu: user.gpu } });
+});
+
+app.post('/admin/api/giveCard', requireAuth, async (req, res) => {
+  const { userId, cardId } = req.body;
+  
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false, error: 'User not found' });
+  
+  if (!user.gameState) user.gameState = {};
+  if (!user.gameState.cardStates) {
+    user.gameState.cardStates = [];
+    for (let i = 0; i < 9; i++) {
+      user.gameState.cardStates.push({ owned: false, lastClaim: 0 });
+    }
+  }
+  
+  if (!user.gameState.cardStates[cardId]) {
+    user.gameState.cardStates[cardId] = { owned: false, lastClaim: 0 };
+  }
+  user.gameState.cardStates[cardId].owned = true;
+  user.gameState.cardStates[cardId].lastClaim = Date.now();
+  
+  await user.save();
+  
+  console.log(`🎁 Admin ${req.admin.username} gave card ${cardId} to ${userId}`);
+  res.json({ success: true });
+});
+
+app.post('/admin/api/giveGpu', requireAuth, async (req, res) => {
+  const { userId, amount } = req.body;
+  
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false, error: 'User not found' });
+  
+  user.gpu += amount;
+  await user.save();
+  
+  console.log(`⚡ Admin ${req.admin.username} gave ${amount} GPU to ${userId}`);
+  res.json({ success: true });
+});
+
+app.post('/admin/api/giveTon', requireAuth, async (req, res) => {
+  const { userId, amount } = req.body;
+  
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false, error: 'User not found' });
+  
+  user.ton += amount;
+  await user.save();
+  
+  console.log(`💰 Admin ${req.admin.username} gave ${amount} TON to ${userId}`);
   res.json({ success: true });
 });
 
@@ -487,7 +613,7 @@ app.post('/admin/reject', requireAuth, async (req, res) => {
 app.get('/admin/logout', (req, res) => { req.session.destroy(); res.redirect('/admin/login'); });
 app.get('/', (req, res) => { res.json({ status: 'OK', message: 'CryptoGPU Backend is running' }); });
 
-// ========== API ДЛЯ БОТА (засчёт реферала) ==========
+// ========== API ДЛЯ БОТА ==========
 app.post('/api/bot/registerRef', async (req, res) => {
   const { userId, referrerId, name } = req.body;
   
