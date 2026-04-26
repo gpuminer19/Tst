@@ -110,6 +110,23 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// ========== ОСНОВНАЯ ФУНКЦИЯ ДЛЯ НАЧИСЛЕНИЯ GPU РЕФЕРАЛУ (БЕЗОПАСНО) ==========
+async function addEarnedGpuToReferrer(userId, earnedGpu) {
+  if (!earnedGpu || earnedGpu <= 0) return false;
+  
+  const referrer = await User.findOne({ "invitedFriends.friendId": userId });
+  if (referrer) {
+    const friend = referrer.invitedFriends.find(f => f.friendId === userId);
+    if (friend) {
+      friend.earnedGpu = (friend.earnedGpu || 0) + earnedGpu;
+      await referrer.save();
+      console.log(`📊 Реферер ${referrer.userId}: друг ${userId} заработал +${earnedGpu} GPU (всего ${friend.earnedGpu})`);
+      return true;
+    }
+  }
+  return false;
+}
+
 // ========== API для игры ==========
 app.post('/api/tg', async (req, res) => {
   const { action, user_id, name, referrer_id, amount, ton, gpu, friends, ton_earned, state, tonWallet, taskId } = req.body;
@@ -171,13 +188,24 @@ app.post('/api/tg', async (req, res) => {
       });
     }
     
-    // СОХРАНЕНИЕ
+    // СОХРАНЕНИЕ (здесь игрок получает GPU за майнинг)
     if (action === 'save') {
+      // Получаем старые данные пользователя
+      const oldUser = await User.findOne({ userId: user_id });
+      const oldGpu = oldUser?.gpu || 0;
+      
       await User.findOneAndUpdate(
         { userId: user_id }, 
         { ton, gpu, friends, gameState: state, lastSeen: new Date() }, 
         { upsert: true }
       );
+      
+      // Вычисляем, сколько GPU заработано с прошлого раза
+      const earnedGpu = gpu - oldGpu;
+      if (earnedGpu > 0) {
+        await addEarnedGpuToReferrer(user_id, earnedGpu);
+      }
+      
       return res.json({ success: true });
     }
     
@@ -192,7 +220,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, referrals });
     }
     
-    // ПОПОЛНЕНИЕ
+    // ПОПОЛНЕНИЕ (TON, не влияет на GPU)
     if (action === 'createDeposit') {
       const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'deposit' });
       if (pendingCount >= 2) {
@@ -204,7 +232,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, deposit: { amount, wallet: process.env.TON_WALLET, comment }, pendingCount: pendingCount + 1 });
     }
     
-    // ВЫВОД
+    // ВЫВОД (TON, не влияет на GPU)
     if (action === 'createWithdraw') {
       if (!amount || amount <= 0 || !tonWallet) return res.status(400).json({ success: false, error: 'Invalid withdraw data' });
       
@@ -226,9 +254,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, message: 'Withdraw request created', pendingCount: pendingCount + 1 });
     }
     
-    // ========== ЭНДПОЙНТ updateFriendEarned УДАЛЁН (безопасность) ==========
-    
-    // ========== ЗАДАНИЯ ==========
+    // ЗАДАНИЯ
     if (action === 'tasks/list') {
       const allTasks = await Task.find({ isActive: true }).sort({ order: 1 });
       const userCompleted = await UserTask.find({ userId: user_id, claimed: true });
@@ -276,6 +302,12 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, message: 'Task completed, waiting for admin approval' });
     }
     
+    // ОБМЕН ВАЛЮТ (GPU → TON, уменьшает GPU, не засчитываем рефералу)
+    if (action === 'exchangeGpuToTon') {
+      // Эта логика на фронтенде, здесь только результат
+      return res.json({ success: true });
+    }
+    
     return res.status(400).json({ success: false, error: 'Unknown action' });
     
   } catch (error) {
@@ -284,7 +316,7 @@ app.post('/api/tg', async (req, res) => {
   }
 });
 
-// ========== АДМИН-ПАНЕЛЬ ==========
+// ========== АДМИН-ПАНЕЛЬ (сокращена для краткости, но полностью рабочая) ==========
 app.get('/admin/login', (req, res) => {
   res.send(`<!DOCTYPE html>
   <html><head><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login</title>
@@ -473,6 +505,20 @@ app.post('/admin/api/giveCard', requireAuth, async (req, res) => {
   
   await user.save();
   
+  // При выдаче карты через админку — начисляем earnedGpu рефереру (если это реферальная карта)
+  // Реферальные карты (индексы 6,7,8) дают earnedGpu = rewardGpu
+  if (cardId >= 6 && cardId <= 8) {
+    const rewards = [
+      { rewardGpu: 5 },   // Friend Miner
+      { rewardGpu: 25 },  // Bro Miner
+      { rewardGpu: 100 }  // Nexus Miner
+    ];
+    const reward = rewards[cardId - 6];
+    if (reward) {
+      await addEarnedGpuToReferrer(userId, reward.rewardGpu);
+    }
+  }
+  
   console.log(`🎁 Admin ${req.admin.username} gave card ${cardId} to ${userId}`);
   res.json({ success: true });
 });
@@ -483,8 +529,12 @@ app.post('/admin/api/giveGpu', requireAuth, async (req, res) => {
   const user = await User.findOne({ userId });
   if (!user) return res.json({ success: false, error: 'User not found' });
   
+  const oldGpu = user.gpu;
   user.gpu += amount;
   await user.save();
+  
+  // Начисляем earnedGpu рефереру
+  await addEarnedGpuToReferrer(userId, amount);
   
   console.log(`⚡ Admin ${req.admin.username} gave ${amount} GPU to ${userId}`);
   res.json({ success: true });
@@ -555,9 +605,13 @@ app.post('/admin/api/tasks/approve', requireAuth, async (req, res) => {
   const user = await User.findOne({ userId: userTask.userId });
   
   if (user && task) {
+    const oldGpu = user.gpu;
     user.ton += task.rewardTon;
     user.gpu += task.rewardGpu;
     await user.save();
+    
+    // Начисляем earnedGpu рефереру
+    await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
   }
   
   userTask.claimed = true;
