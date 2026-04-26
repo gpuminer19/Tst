@@ -469,13 +469,14 @@ app.get('/admin/api/userCards/:userId', requireAuth, async (req, res) => {
   const user = await User.findOne({ userId: req.params.userId });
   const cardStates = user?.gameState?.cardStates || [];
   
+  // ОБНОВЛЁННЫЙ СПИСОК КАРТ ДЛЯ АДМИН-ПАНЕЛИ
   const cards = [
     { id: 0, name: "Basic Miner", owned: cardStates[0]?.owned || false },
     { id: 1, name: "Normal Miner", owned: cardStates[1]?.owned || false },
     { id: 2, name: "Pro Miner", owned: cardStates[2]?.owned || false },
     { id: 3, name: "Ultra Miner", owned: cardStates[3]?.owned || false },
     { id: 4, name: "Legendary Miner", owned: cardStates[4]?.owned || false },
-    { id: 5, name: "X Miner", owned: cardStates[5]?.owned || false },
+    { id: 5, name: "Minex", owned: cardStates[5]?.owned || false },
     { id: 6, name: "Friend Miner", owned: cardStates[6]?.owned || false },
     { id: 7, name: "Bro Miner", owned: cardStates[7]?.owned || false },
     { id: 8, name: "Nexus Miner", owned: cardStates[8]?.owned || false }
@@ -507,8 +508,9 @@ app.post('/admin/api/giveCard', requireAuth, async (req, res) => {
   await user.save();
   
   // При выдаче реферальной карты начисляем earnedGpu рефереру
+  // Friend Miner (id=6) -> 15 GPU, Bro Miner (id=7) -> 100 GPU, Nexus Miner (id=8) -> 200 GPU
   if (cardId >= 6 && cardId <= 8) {
-    const rewards = [5, 25, 100];
+    const rewards = [15, 100, 200];
     const rewardGpu = rewards[cardId - 6];
     if (rewardGpu) {
       await addEarnedGpuToReferrer(userId, rewardGpu);
