@@ -110,19 +110,23 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// ========== ОСНОВНАЯ ФУНКЦИЯ ДЛЯ НАЧИСЛЕНИЯ GPU РЕФЕРАЛУ (БЕЗОПАСНО) ==========
+// ========== БЕЗОПАСНАЯ ФУНКЦИЯ НАЧИСЛЕНИЯ РЕФЕРАЛУ ==========
 async function addEarnedGpuToReferrer(userId, earnedGpu) {
   if (!earnedGpu || earnedGpu <= 0) return false;
-  
-  const referrer = await User.findOne({ "invitedFriends.friendId": userId });
-  if (referrer) {
-    const friend = referrer.invitedFriends.find(f => f.friendId === userId);
-    if (friend) {
-      friend.earnedGpu = (friend.earnedGpu || 0) + earnedGpu;
-      await referrer.save();
-      console.log(`📊 Реферер ${referrer.userId}: друг ${userId} заработал +${earnedGpu} GPU (всего ${friend.earnedGpu})`);
-      return true;
+  try {
+    const referrer = await User.findOne({ "invitedFriends.friendId": userId });
+    if (referrer && referrer.invitedFriends && Array.isArray(referrer.invitedFriends)) {
+      const friendIndex = referrer.invitedFriends.findIndex(f => f.friendId === userId);
+      if (friendIndex !== -1) {
+        const currentEarned = referrer.invitedFriends[friendIndex].earnedGpu || 0;
+        referrer.invitedFriends[friendIndex].earnedGpu = currentEarned + earnedGpu;
+        await referrer.save();
+        console.log(`✅ Начислено ${earnedGpu} GPU рефереру ${referrer.userId}`);
+        return true;
+      }
     }
+  } catch (error) {
+    console.error("Ошибка в addEarnedGpuToReferrer:", error);
   }
   return false;
 }
@@ -188,25 +192,28 @@ app.post('/api/tg', async (req, res) => {
       });
     }
     
-    // СОХРАНЕНИЕ (здесь игрок получает GPU за майнинг)
+    // СОХРАНЕНИЕ (с автоматическим начислением рефералу)
     if (action === 'save') {
-      // Получаем старые данные пользователя
-      const oldUser = await User.findOne({ userId: user_id });
-      const oldGpu = oldUser?.gpu || 0;
-      
-      await User.findOneAndUpdate(
-        { userId: user_id }, 
-        { ton, gpu, friends, gameState: state, lastSeen: new Date() }, 
-        { upsert: true }
-      );
-      
-      // Вычисляем, сколько GPU заработано с прошлого раза
-      const earnedGpu = gpu - oldGpu;
-      if (earnedGpu > 0) {
-        await addEarnedGpuToReferrer(user_id, earnedGpu);
+      try {
+        const oldUser = await User.findOne({ userId: user_id });
+        const oldGpu = oldUser?.gpu || 0;
+        
+        await User.findOneAndUpdate(
+          { userId: user_id }, 
+          { ton, gpu, friends, gameState: state, lastSeen: new Date() }, 
+          { upsert: true }
+        );
+        
+        const earnedGpu = gpu - oldGpu;
+        if (earnedGpu > 0) {
+          await addEarnedGpuToReferrer(user_id, earnedGpu);
+        }
+        
+        return res.json({ success: true });
+      } catch (error) {
+        console.error("Ошибка сохранения:", error);
+        return res.status(500).json({ success: false, error: "Server error" });
       }
-      
-      return res.json({ success: true });
     }
     
     // РЕФЕРАЛЫ
@@ -220,7 +227,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, referrals });
     }
     
-    // ПОПОЛНЕНИЕ (TON, не влияет на GPU)
+    // ПОПОЛНЕНИЕ
     if (action === 'createDeposit') {
       const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'deposit' });
       if (pendingCount >= 2) {
@@ -232,7 +239,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, deposit: { amount, wallet: process.env.TON_WALLET, comment }, pendingCount: pendingCount + 1 });
     }
     
-    // ВЫВОД (TON, не влияет на GPU)
+    // ВЫВОД
     if (action === 'createWithdraw') {
       if (!amount || amount <= 0 || !tonWallet) return res.status(400).json({ success: false, error: 'Invalid withdraw data' });
       
@@ -302,12 +309,6 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, message: 'Task completed, waiting for admin approval' });
     }
     
-    // ОБМЕН ВАЛЮТ (GPU → TON, уменьшает GPU, не засчитываем рефералу)
-    if (action === 'exchangeGpuToTon') {
-      // Эта логика на фронтенде, здесь только результат
-      return res.json({ success: true });
-    }
-    
     return res.status(400).json({ success: false, error: 'Unknown action' });
     
   } catch (error) {
@@ -316,7 +317,7 @@ app.post('/api/tg', async (req, res) => {
   }
 });
 
-// ========== АДМИН-ПАНЕЛЬ (сокращена для краткости, но полностью рабочая) ==========
+// ========== АДМИН-ПАНЕЛЬ ==========
 app.get('/admin/login', (req, res) => {
   res.send(`<!DOCTYPE html>
   <html><head><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login</title>
@@ -505,17 +506,12 @@ app.post('/admin/api/giveCard', requireAuth, async (req, res) => {
   
   await user.save();
   
-  // При выдаче карты через админку — начисляем earnedGpu рефереру (если это реферальная карта)
-  // Реферальные карты (индексы 6,7,8) дают earnedGpu = rewardGpu
+  // При выдаче реферальной карты начисляем earnedGpu рефереру
   if (cardId >= 6 && cardId <= 8) {
-    const rewards = [
-      { rewardGpu: 5 },   // Friend Miner
-      { rewardGpu: 25 },  // Bro Miner
-      { rewardGpu: 100 }  // Nexus Miner
-    ];
-    const reward = rewards[cardId - 6];
-    if (reward) {
-      await addEarnedGpuToReferrer(userId, reward.rewardGpu);
+    const rewards = [5, 25, 100];
+    const rewardGpu = rewards[cardId - 6];
+    if (rewardGpu) {
+      await addEarnedGpuToReferrer(userId, rewardGpu);
     }
   }
   
@@ -529,11 +525,9 @@ app.post('/admin/api/giveGpu', requireAuth, async (req, res) => {
   const user = await User.findOne({ userId });
   if (!user) return res.json({ success: false, error: 'User not found' });
   
-  const oldGpu = user.gpu;
   user.gpu += amount;
   await user.save();
   
-  // Начисляем earnedGpu рефереру
   await addEarnedGpuToReferrer(userId, amount);
   
   console.log(`⚡ Admin ${req.admin.username} gave ${amount} GPU to ${userId}`);
@@ -605,12 +599,10 @@ app.post('/admin/api/tasks/approve', requireAuth, async (req, res) => {
   const user = await User.findOne({ userId: userTask.userId });
   
   if (user && task) {
-    const oldGpu = user.gpu;
     user.ton += task.rewardTon;
     user.gpu += task.rewardGpu;
     await user.save();
     
-    // Начисляем earnedGpu рефереру
     await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
   }
   
@@ -653,7 +645,7 @@ app.post('/admin/reject', requireAuth, async (req, res) => {
 app.get('/admin/logout', (req, res) => { req.session.destroy(); res.redirect('/admin/login'); });
 app.get('/', (req, res) => { res.json({ status: 'OK', message: 'CryptoGPU Backend is running' }); });
 
-// ========== API ДЛЯ БОТА (засчёт реферала) ==========
+// ========== API ДЛЯ БОТА ==========
 app.post('/api/bot/registerRef', async (req, res) => {
   const { userId, referrerId, name } = req.body;
   
@@ -690,6 +682,17 @@ app.post('/api/bot/registerRef', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/bot/registerRef:', error);
     res.json({ success: false, error: error.message });
+  }
+});
+
+// ========== ИНДЕКСЫ MONGODB ==========
+mongoose.connection.once('open', async () => {
+  try {
+    await User.collection.createIndex({ userId: 1 });
+    await User.collection.createIndex({ "invitedFriends.friendId": 1 });
+    console.log('✅ Индексы MongoDB созданы');
+  } catch (err) {
+    console.error("Ошибка создания индексов:", err);
   }
 });
 
