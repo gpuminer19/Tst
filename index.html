@@ -109,6 +109,11 @@
   .task-btn { margin-top: 8px; background: #00A86B !important; border-radius: 40px; }
   .task-completed { margin-top: 8px; font-size: 11px; color: #00A86B; }
   .task-pending { margin-top: 8px; font-size: 11px; color: #FF8C00; }
+  
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(6px); }
+  }
 </style>
 </head>
 <body>
@@ -143,6 +148,35 @@
 </div>
 
 <div id="home" class="tab active">
+  <div class="roi-banner" style="margin: 16px 16px 0 16px;">
+    <div class="roi-card" style="background: linear-gradient(135deg, #0D2B1F, #0A1A12); border-radius: 20px; padding: 14px 18px; border: 1px solid #00A86B; position: relative; overflow: hidden;">
+      <div style="position: absolute; top: -20px; right: -20px; width: 80px; height: 80px; background: radial-gradient(circle, rgba(0,168,107,0.2), transparent); border-radius: 50%;"></div>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div style="background: #00A86B; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(0,168,107,0.5);">
+          <i class="fa-solid fa-chart-line" style="color: #0B0E1A; font-size: 20px;"></i>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; color: #8EA3D4; letter-spacing: 0.5px;">📊 ИНФОРМАЦИЯ ПО МАЙНЕРАМ</div>
+          <div style="font-size: 16px; font-weight: 700; color: #00FFAA; margin-top: 4px;">
+            ⚡ Окупаемость всех майнеров — 30 дней
+          </div>
+          <div style="font-size: 13px; color: #A0C4A0; margin-top: 4px;">
+            ➡️ Дальше — чистый доход! <i class="fa-solid fa-arrow-trend-up" style="color: #00FFAA;"></i>
+          </div>
+        </div>
+        <div style="background: rgba(0,168,107,0.2); border-radius: 30px; padding: 6px 12px;">
+          <i class="fa-solid fa-coins" style="color: #00FFAA; font-size: 14px;"></i>
+          <span style="color: #00FFAA; font-weight: bold; margin-left: 4px;">PROFIT</span>
+        </div>
+      </div>
+      <div style="position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 10px solid #00A86B;"></div>
+    </div>
+  </div>
+  
+  <div style="display: flex; justify-content: center; margin: 8px 0 0 0;">
+    <i class="fa-solid fa-arrow-down-long" style="color: #00FFAA; font-size: 24px; animation: bounce 1.5s infinite; filter: drop-shadow(0 0 5px #00FFAA);"></i>
+  </div>
+  
   <div class="grid" id="grid"></div>
 </div>
 
@@ -247,9 +281,43 @@
 <div id="wallet" class="tab">
   <div class="deposit-box">
     <h3>💳 Пополнить баланс <img src="ton.png" style="width: 14px; height: 14px;"></h3>
-    <label>Сумма пополнения (<img src="ton.png" style="width: 12px; height: 12px;">)</label>
-    <input id="depositAmount" type="number" min="0.1" step="0.1" placeholder="Например, 5">
-    <button class="pay-btn" id="payBtn"> Оплатить</button>
+    
+    <!-- Форма пополнения -->
+    <div id="depositForm">
+      <label>Сумма пополнения (<img src="ton.png" style="width: 12px; height: 12px;">)</label>
+      <input id="depositAmount" type="number" min="0.1" step="0.1" placeholder="Например, 5">
+      <button class="pay-btn" id="payBtn">💸 Оплатить</button>
+    </div>
+    
+    <!-- Блок с реквизитами и кнопками подтверждения -->
+    <div id="depositConfirm" style="display: none;">
+      <div id="paymentDetails" style="background: rgba(0,168,107,0.1); border-radius: 16px; padding: 16px; margin-bottom: 16px; border: 1px solid #00A86B;">
+        <div style="text-align: center; margin-bottom: 12px;">
+          <i class="fa-solid fa-wallet" style="font-size: 24px; color: #00FFAA;"></i>
+          <div style="font-size: 13px; color: #FFB347; margin-top: 5px;">💸 Реквизиты для оплаты</div>
+        </div>
+        <div class="pay-info" style="background: rgba(0,0,0,0.3); margin-top: 0;">
+          <div class="row">
+            <div class="lbl">💰 Сумма</div>
+            <div class="val" id="paymentAmount" style="font-size: 18px; font-weight: bold;">0 TON</div>
+          </div>
+          <div class="row">
+            <div class="lbl">🏦 Кошелёк</div>
+            <div class="val" id="paymentWallet" style="word-break: break-all;">Загрузка...</div>
+            <button class="copy-mini" onclick="copyText(document.getElementById('paymentWallet').innerText)">📋 Копировать</button>
+          </div>
+        </div>
+        <div class="pay-warn" style="margin-top: 12px; text-align: center;">
+          ⚠️ Отправьте ровно указанную сумму на кошелёк<br>
+          После оплаты нажмите кнопку "✅ Я оплатил"
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <button id="confirmPayBtn" style="background: #00A86B; flex: 1;">✅ Я оплатил</button>
+        <button id="cancelPayBtn" style="background: #DC2626; flex: 1;">❌ Отменить</button>
+      </div>
+    </div>
+    
     <div id="payResult"></div>
     
     <hr>
@@ -289,7 +357,6 @@ const API_URL = "https://tst-production-b90a.up.railway.app/api/tg";
 const GAME_URL = "https://gpuminer19.github.io/Tst";
 const BOT_USERNAME = "Testgpuuubot";
 
-// 12 часов в миллисекундах
 const CLAIM_INTERVAL = 12 * 60 * 60 * 1000;
 
 // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
@@ -308,8 +375,10 @@ let playerData = {
 let cardStates = [];
 let cardTimers = [];
 let isClaiming = [];
+let pendingDepositAmount = null;
+let pendingDepositData = null;
 
-// ========== ОБНОВЛЁННЫЙ СПИСОК МАЙНЕРОВ ==========
+// ========== СПИСОК МАЙНЕРОВ ==========
 const gpuTemplates = [
   { name: "Basic Miner", price: 1, priceCurrency: "gpu", tonReward: 0, gpuReward: 15, image: "basicminer.png", claimTime: "12 часов" },
   { name: "Normal Miner", price: 2, priceCurrency: "ton", tonReward: 0.03, gpuReward: 4, image: "normalminer.png", claimTime: "12 часов" },
@@ -332,13 +401,6 @@ function initCardStates() {
     intervalId: null
   }));
   isClaiming = gpuTemplates.map(() => false);
-}
-
-function clearAllCardTimers() {
-  for (let i = 0; i < cardTimers.length; i++) {
-    if (cardTimers[i]) clearInterval(cardTimers[i]);
-  }
-  cardTimers = [];
 }
 
 function updateUI() {
@@ -452,19 +514,6 @@ async function refreshBalanceForAnyAction() {
           renderAllCards();
         }
     }
-}
-
-async function syncBalance() {
-  const result = await apiRequest("register", {});
-  if (result && result.success) {
-    if (playerData.ton !== result.data.ton) {
-      playerData.ton = result.data.ton;
-      playerData.gpuTokens = result.data.gpu;
-      updateUI();
-    }
-    return result.data.ton;
-  }
-  return playerData.ton;
 }
 
 function startRewardTimer(idx) {
@@ -813,13 +862,12 @@ async function loadReferrals() {
 }
 
 async function createDeposit(amount) {
-  await refreshBalanceForAnyAction();
   const result = await apiRequest("createDeposit", { amount });
   if (result?.success) {
-    showPayInfo(result.deposit);
-    await refreshBalanceForAnyAction();
+    return result.deposit;
   } else {
     tg.showAlert("❌ Ошибка создания заявки");
+    return null;
   }
 }
 
@@ -1012,11 +1060,10 @@ if (buyBtn) {
   };
 }
 
-function showPayInfo(deposit) {
-  document.getElementById('payResult').innerHTML = `<div class="pay-info"><div class="row"><div class="lbl">Сумма</div><span class="val">${deposit.amount} <img src="ton.png" style="width: 12px; height: 12px;"></span></div><div class="row"><div class="lbl">Кошелёк</div><span class="val">${deposit.wallet}</span><button class="copy-mini" onclick="copyText('${deposit.wallet}')">📋</button></div><div class="row"><div class="lbl">Комментарий</div><span class="val">${deposit.comment}</span><button class="copy-mini" onclick="copyText('${deposit.comment}')">📋</button></div><div class="pay-warn">⚠️ Отправьте ровно <b>${deposit.amount} TON</b> с комментарием</div></div>`;
+function copyText(text) { 
+  navigator.clipboard.writeText(text); 
+  tg.showAlert("📋 Скопировано"); 
 }
-
-function copyText(text) { navigator.clipboard.writeText(text); tg.showAlert("📋 Скопировано"); }
 
 window.openTab = async function(id, btn) {
     await refreshBalanceForAnyAction();
@@ -1040,6 +1087,118 @@ window.openTab = async function(id, btn) {
 };
 
 function keepAlive() { setInterval(async () => { try { await fetch(API_URL, { method: 'HEAD' }); } catch(e) {} }, 4 * 60 * 1000); }
+
+// ========== ЛОГИКА ПОПОЛНЕНИЯ ==========
+
+// Обработчик кнопки "Оплатить" - показываем реквизиты
+document.getElementById("payBtn").onclick = async () => {
+  const amount = parseFloat(document.getElementById("depositAmount").value);
+  if (isNaN(amount) || amount <= 0) {
+    tg.showAlert("❌ Введите сумму");
+    return;
+  }
+  if (amount < 0.1) {
+    tg.showAlert("❌ Минимальная сумма 0.1 TON");
+    return;
+  }
+  
+  // Сохраняем сумму
+  pendingDepositAmount = amount;
+  
+  // Показываем загрузку
+  const payBtn = document.getElementById("payBtn");
+  const originalText = payBtn.innerText;
+  payBtn.innerText = "⏳ Загрузка...";
+  payBtn.disabled = true;
+  
+  try {
+    // Создаём заявку, чтобы получить кошелёк
+    const depositData = await createDeposit(amount);
+    
+    if (depositData) {
+      pendingDepositData = depositData;
+      
+      // Показываем реквизиты
+      document.getElementById("paymentAmount").innerHTML = `${depositData.amount} <img src="ton.png" style="width: 12px; height: 12px;">`;
+      document.getElementById("paymentWallet").innerText = depositData.wallet;
+      
+      // Скрываем форму, показываем реквизиты
+      document.getElementById("depositForm").style.display = "none";
+      document.getElementById("depositConfirm").style.display = "block";
+      document.getElementById("payResult").innerHTML = "";
+    } else {
+      tg.showAlert("❌ Ошибка получения реквизитов");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    tg.showAlert("❌ Ошибка сервера");
+  } finally {
+    payBtn.innerText = originalText;
+    payBtn.disabled = false;
+  }
+};
+
+// Обработчик "Я оплатил" - создаём заявку
+document.getElementById("confirmPayBtn").onclick = async () => {
+  if (!pendingDepositAmount || !pendingDepositData) return;
+  
+  const confirmBtn = document.getElementById("confirmPayBtn");
+  const originalText = confirmBtn.innerText;
+  confirmBtn.innerText = "⏳ Обработка...";
+  confirmBtn.disabled = true;
+  
+  try {
+    // Показываем информацию о созданной заявке
+    showPayInfo(pendingDepositData);
+    
+    // Скрываем блок подтверждения
+    document.getElementById("depositConfirm").style.display = "none";
+    document.getElementById("depositForm").style.display = "block";
+    document.getElementById("depositAmount").value = "";
+    
+    await refreshBalanceForAnyAction();
+    tg.showAlert(`✅ Заявка на пополнение ${pendingDepositAmount} TON создана! Ожидайте подтверждения администратора.`);
+  } catch (error) {
+    console.error("Error:", error);
+    tg.showAlert("❌ Ошибка сервера");
+    document.getElementById("depositConfirm").style.display = "none";
+    document.getElementById("depositForm").style.display = "block";
+  } finally {
+    confirmBtn.innerText = originalText;
+    confirmBtn.disabled = false;
+    pendingDepositAmount = null;
+    pendingDepositData = null;
+  }
+};
+
+function showPayInfo(deposit) {
+  document.getElementById('payResult').innerHTML = `<div class="pay-info"><div class="row"><div class="lbl">Сумма</div><span class="val">${deposit.amount} <img src="ton.png" style="width: 12px; height: 12px;"></span></div><div class="row"><div class="lbl">Кошелёк</div><span class="val">${deposit.wallet}</span><button class="copy-mini" onclick="copyText('${deposit.wallet}')">📋</button></div><div class="row"><div class="lbl">Комментарий</div><span class="val">${deposit.comment}</span><button class="copy-mini" onclick="copyText('${deposit.comment}')">📋</button></div><div class="pay-warn">⚠️ Отправьте ровно <b>${deposit.amount} TON</b> с комментарием</div></div>`;
+}
+
+// Обработчик "Отменить"
+document.getElementById("cancelPayBtn").onclick = () => {
+  document.getElementById("depositConfirm").style.display = "none";
+  document.getElementById("depositForm").style.display = "block";
+  document.getElementById("depositAmount").value = "";
+  document.getElementById("payResult").innerHTML = "";
+  pendingDepositAmount = null;
+  pendingDepositData = null;
+  tg.showAlert("❌ Оплата отменена");
+};
+
+// Обработчик вывода
+document.getElementById("withdrawBtn").onclick = () => {
+  const amount = parseFloat(document.getElementById("withdrawAmount").value);
+  const wallet = document.getElementById("withdrawWallet").value.trim();
+  if (isNaN(amount) || amount <= 0) tg.showAlert("❌ Введите сумму");
+  else if (!wallet) tg.showAlert("❌ Введите кошелёк");
+  else createWithdraw(amount, wallet);
+};
+
+document.getElementById("copyRefBtn").onclick = () => {
+  navigator.clipboard.writeText(document.getElementById("refLink").innerText);
+  tg.showAlert("📋 Реферальная ссылка скопирована!");
+};
 
 async function init() {
   tg.ready(); tg.expand();
@@ -1075,23 +1234,6 @@ async function init() {
   document.getElementById("app").style.display = "block";
   tg.MainButton.hide(); tg.BackButton.hide();
 }
-
-document.getElementById("payBtn").onclick = () => {
-  const amount = parseFloat(document.getElementById("depositAmount").value);
-  if (isNaN(amount) || amount <= 0) tg.showAlert("❌ Введите сумму");
-  else createDeposit(amount);
-};
-document.getElementById("withdrawBtn").onclick = () => {
-  const amount = parseFloat(document.getElementById("withdrawAmount").value);
-  const wallet = document.getElementById("withdrawWallet").value.trim();
-  if (isNaN(amount) || amount <= 0) tg.showAlert("❌ Введите сумму");
-  else if (!wallet) tg.showAlert("❌ Введите кошелёк");
-  else createWithdraw(amount, wallet);
-};
-document.getElementById("copyRefBtn").onclick = () => {
-  navigator.clipboard.writeText(document.getElementById("refLink").innerText);
-  tg.showAlert("📋 Реферальная ссылка скопирована!");
-};
 
 init();
 
