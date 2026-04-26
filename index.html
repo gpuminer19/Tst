@@ -107,6 +107,7 @@
   .task-rewards { margin-top: 8px; }
   .task-btn { margin-top: 8px; }
   .task-completed { margin-top: 8px; font-size: 11px; color: #00A86B; }
+  .task-pending { margin-top: 8px; font-size: 11px; color: #FF8C00; }
 </style>
 </head>
 <body>
@@ -644,35 +645,91 @@ async function loadTasksGame() {
       return;
     }
     
-    container.innerHTML = result.tasks.map(task => `
-      <div class="card task-card">
-        <div class="card-info">
-          <h3>${task.title}</h3>
-          <div class="task-desc">${task.description}</div>
-          <div class="rewards-info task-rewards">
-            <span>💰 +${task.rewardTon} <img src="ton.png" style="width: 12px; height: 12px;"></span>
-            <span>⚡ +${task.rewardGpu} <img src="gpu.png" style="width: 12px; height: 12px;"></span>
+    container.innerHTML = result.tasks.map(task => {
+      let statusHtml = '';
+      let buttonHtml = '';
+      
+      if (task.completed) {
+        statusHtml = '<div class="task-completed">✅ Задание выполнено</div>';
+      } else if (task.pending) {
+        statusHtml = '<div class="task-pending">⏳ Ожидает проверки администратора</div>';
+      } else {
+        const hasUrl = task.taskUrl && task.taskUrl.length > 0;
+        buttonHtml = hasUrl 
+          ? `<button class="claim-btn task-btn" onclick="openTaskUrl('${task.id}', '${task.taskUrl}')">🔗 Перейти и выполнить</button>`
+          : `<button class="claim-btn task-btn" onclick="completeTask('${task.id}')">✅ Выполнить</button>`;
+      }
+      
+      return `
+        <div class="card task-card">
+          <div class="card-info">
+            <h3>${task.title}</h3>
+            <div class="task-desc">${task.description}</div>
+            <div class="rewards-info task-rewards">
+              <span>💰 +${task.rewardTon} <img src="ton.png" style="width: 12px; height: 12px;"></span>
+              <span>⚡ +${task.rewardGpu} <img src="gpu.png" style="width: 12px; height: 12px;"></span>
+            </div>
+            ${statusHtml}
+            ${buttonHtml}
           </div>
-          ${!task.completed ? 
-            `<button class="claim-btn task-btn" onclick="completeTask('${task.id}')">✅ Выполнить</button>` : 
-            '<div class="task-completed">✅ Задание выполнено</div>'
-          }
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } else {
     container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">📭 Нет активных заданий</div>';
   }
 }
 
+async function openTaskUrl(taskId, url) {
+  tg.openTelegramLink(url);
+  tg.showAlert("⏳ Проверяем выполнение задания...");
+  
+  setTimeout(async () => {
+    const result = await apiRequest("tasks/complete", { taskId });
+    if (result?.success) {
+      tg.showAlert("✅ Задание отмечено как выполненное! Администратор проверит и начислит награду.");
+      await loadTasksGame();
+    } else {
+      tg.showAlert("❌ " + (result?.error || "Ошибка"));
+    }
+  }, 5000);
+}
+
 async function completeTask(taskId) {
   const result = await apiRequest("tasks/complete", { taskId });
   if (result?.success) {
-    tg.showAlert("✅ Задание выполнено! Ожидайте подтверждения админа.");
+    tg.showAlert("✅ Задание отмечено как выполненное! Администратор проверит и начислит награду.");
     await loadTasksGame();
   } else {
     tg.showAlert("❌ " + (result?.error || "Ошибка"));
   }
+}
+
+async function createDeposit(amount) {
+  await refreshBalanceForAnyAction();
+  const result = await apiRequest("createDeposit", { amount });
+  if (result?.success) {
+    showPayInfo(result.deposit);
+    await refreshBalanceForAnyAction();
+  } else {
+    tg.showAlert("❌ Ошибка создания заявки");
+  }
+}
+
+async function createWithdraw(amount, wallet) {
+  await refreshBalanceForAnyAction();
+  if (amount < 1) { tg.showAlert("❌ Минимальная сумма 1 TON"); return false; }
+  if (!wallet || wallet.length < 10) { tg.showAlert("❌ Введите корректный кошелёк"); return false; }
+  if (playerData.ton < amount) { tg.showAlert("❌ Недостаточно средств"); return false; }
+  const result = await apiRequest("createWithdraw", { amount, tonWallet: wallet });
+  if (result?.success) {
+    tg.showAlert("✅ Заявка на вывод создана!");
+    document.getElementById("withdrawAmount").value = "";
+    document.getElementById("withdrawWallet").value = "";
+    await refreshBalanceForAnyAction();
+    return true;
+  }
+  return false;
 }
 
 // ========== ОБМЕН ВАЛЮТ ==========
@@ -749,33 +806,6 @@ if (buyBtn) {
     buyEstimate.innerHTML = "Вы получите: 0 GPU";
     tg.showAlert(`✅ Вы обменяли ${tonAmount} TON на ${gpuReceived.toFixed(2)} GPU`);
   };
-}
-
-async function createDeposit(amount) {
-  await refreshBalanceForAnyAction();
-  const result = await apiRequest("createDeposit", { amount });
-  if (result?.success) {
-    showPayInfo(result.deposit);
-    await refreshBalanceForAnyAction();
-  } else {
-    tg.showAlert("❌ Ошибка создания заявки");
-  }
-}
-
-async function createWithdraw(amount, wallet) {
-  await refreshBalanceForAnyAction();
-  if (amount < 1) { tg.showAlert("❌ Минимальная сумма 1 TON"); return false; }
-  if (!wallet || wallet.length < 10) { tg.showAlert("❌ Введите корректный кошелёк"); return false; }
-  if (playerData.ton < amount) { tg.showAlert("❌ Недостаточно средств"); return false; }
-  const result = await apiRequest("createWithdraw", { amount, tonWallet: wallet });
-  if (result?.success) {
-    tg.showAlert("✅ Заявка на вывод создана!");
-    document.getElementById("withdrawAmount").value = "";
-    document.getElementById("withdrawWallet").value = "";
-    await refreshBalanceForAnyAction();
-    return true;
-  }
-  return false;
 }
 
 // ========== ЛОГИКА ВИДЕОКАРТ ==========
