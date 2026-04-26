@@ -633,7 +633,7 @@ async function loadReferrals() {
   }
 }
 
-// ========== ЗАДАНИЯ (МГНОВЕННОЕ ОБНОВЛЕНИЕ, БЕЗ СООБЩЕНИЙ) ==========
+// ========== ЗАДАНИЯ ==========
 async function loadTasksGame() {
   const container = document.getElementById("tasksListGame");
   if (!container) return;
@@ -652,7 +652,7 @@ async function loadTasksGame() {
       if (task.completed) {
         statusHtml = '<div class="task-completed">✅ Задание выполнено</div>';
       } else if (task.pending) {
-        statusHtml = '<div class="task-pending">⏳ Ожидает проверки администратора</div>';
+        statusHtml = '<div class="task-pending">⏳ Ожидает проверки</div>';
       } else {
         const hasUrl = task.taskUrl && task.taskUrl.length > 0;
         const onclickAttr = hasUrl 
@@ -693,17 +693,14 @@ function escapeHtml(str) {
 }
 
 async function openTaskUrl(taskId, url) {
-  // МГНОВЕННО меняем интерфейс
   updateTaskButtonToPending(taskId);
   
-  // Открываем ссылку
   let cleanUrl = url.trim();
   if (!cleanUrl.startsWith('http') && !cleanUrl.startsWith('t.me')) {
     cleanUrl = 'https://' + cleanUrl;
   }
   window.open(cleanUrl, '_blank');
   
-  // Отправляем запрос на сервер
   try {
     await apiRequest("tasks/complete", { taskId });
   } catch (e) {
@@ -712,10 +709,8 @@ async function openTaskUrl(taskId, url) {
 }
 
 async function completeTask(taskId) {
-  // МГНОВЕННО меняем интерфейс
   updateTaskButtonToPending(taskId);
   
-  // Отправляем запрос на сервер
   try {
     await apiRequest("tasks/complete", { taskId });
   } catch (e) {
@@ -724,14 +719,13 @@ async function completeTask(taskId) {
 }
 
 function updateTaskButtonToPending(taskId) {
-  // Находим все карточки заданий
   const taskCards = document.querySelectorAll('.task-card');
   for (const card of taskCards) {
     const btn = card.querySelector('.task-btn');
     if (btn && btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(taskId)) {
       const btnContainer = btn.parentElement;
       if (btnContainer) {
-        btnContainer.innerHTML = '<div class="task-pending">⏳ Ожидает проверки администратора</div>';
+        btnContainer.innerHTML = '<div class="task-pending">⏳ Ожидает проверки</div>';
       }
       break;
     }
@@ -959,7 +953,14 @@ function startMining(idx) {
     const fill = document.getElementById(`fill_${idx}`);
     const text = document.getElementById(`text_${idx}`);
     if (fill) fill.style.width = (progress * 100) + "%";
-    if (text) text.innerHTML = `${currentState.earnedTon.toFixed(2)}/${currentState.totalTon.toFixed(1)} <img src="ton.png" style="width: 10px; height: 10px;">`;
+    if (text) {
+      // Basic Miner (индекс 0) — показываем GPU
+      if (idx === 0) {
+        text.innerHTML = `${currentState.earnedGpu.toFixed(2)}/${currentState.totalGpu} <img src="gpu.png" style="width: 10px; height: 10px;">`;
+      } else {
+        text.innerHTML = `${currentState.earnedTon.toFixed(2)}/${currentState.totalTon.toFixed(1)} <img src="ton.png" style="width: 10px; height: 10px;">`;
+      }
+    }
     
     if (progress >= 1) {
       clearInterval(miningIntervals[idx]);
@@ -992,11 +993,16 @@ function renderCard(idx) {
   const gpu = gpuTemplates[idx];
   const state = gpuStates[idx];
   const cardImage = gpu.image || "8.png";
+  const isBasicMiner = (idx === 0);
   
   if (state.active) {
     const progress = (Date.now() - state.startedAt) / state.durationMs;
     const percent = Math.min(100, progress * 100);
-    card.innerHTML = `<img src="${cardImage}" class="gpu-img"><div class="card-info"><h3>${gpu.name} ⚡</h3><div class="progress-bar"><div class="progress-fill" id="fill_${idx}" style="width:${percent}%"></div><div class="progress-text" id="text_${idx}">${state.earnedTon.toFixed(2)}/${state.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"></div></div></div>`;
+    if (isBasicMiner) {
+      card.innerHTML = `<img src="${cardImage}" class="gpu-img"><div class="card-info"><h3>${gpu.name} ⚡</h3><div class="progress-bar"><div class="progress-fill" id="fill_${idx}" style="width:${percent}%"></div><div class="progress-text" id="text_${idx}">${state.earnedGpu.toFixed(2)}/${state.totalGpu} <img src="gpu.png" style="width: 10px; height: 10px;"></div></div></div>`;
+    } else {
+      card.innerHTML = `<img src="${cardImage}" class="gpu-img"><div class="card-info"><h3>${gpu.name} ⚡</h3><div class="progress-bar"><div class="progress-fill" id="fill_${idx}" style="width:${percent}%"></div><div class="progress-text" id="text_${idx}">${state.earnedTon.toFixed(2)}/${state.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"></div></div></div>`;
+    }
   } else if (state.totalTon > 0 && state.earnedTon >= state.totalTon - 0.01) {
     card.innerHTML = `<img src="${cardImage}" class="gpu-img"><div class="card-info"><h3>${gpu.name}</h3><button class="claim-btn claim-gpu" data-index="${idx}"> Забрать ${state.totalTon} <img src="ton.png" style="width: 10px; height: 10px;"> + ${state.totalGpu} <img src="gpu.png" style="width: 10px; height: 10px;"></button></div>`;
     card.querySelector('.claim-gpu').onclick = () => claimGPU(idx);
