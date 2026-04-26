@@ -88,7 +88,7 @@ async function requireAuth(req, res, next) {
 
 // ========== API для игры ==========
 app.post('/api/tg', async (req, res) => {
-  const { action, user_id, name, referrer_id, amount, ton, gpu, friends, ton_earned, state, tonWallet } = req.body;
+  const { action, user_id, name, referrer_id, amount, ton, gpu, friends, ton_earned, state, tonWallet, earnedGpu } = req.body;
   
   try {
     const bannedUser = await User.findOne({ userId: user_id, isBanned: true });
@@ -114,7 +114,7 @@ app.post('/api/tg', async (req, res) => {
           if (referrer && !referrer.isBanned) {
             referrer.invitedFriends.push({ 
               friendId: user_id, 
-              friendName: name, 
+              friendName: name || user_id.slice(-5),
               date: new Date().toLocaleDateString(),
               earnedGpu: 0
             });
@@ -147,7 +147,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true });
     }
     
-    // РЕФЕРАЛЫ (возвращаем с earnedGpu)
+    // РЕФЕРАЛЫ
     if (action === 'getReferrals') {
       const user = await User.findOne({ userId: user_id });
       const referrals = (user?.invitedFriends || []).map(f => ({ 
@@ -192,11 +192,8 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, message: 'Withdraw request created', pendingCount: pendingCount + 1 });
     }
     
-    // ========== ОБНОВЛЕНИЕ СТАТИСТИКИ РЕФЕРАЛА ==========
+    // ОБНОВЛЕНИЕ СТАТИСТИКИ РЕФЕРАЛА
     if (action === 'updateFriendEarned') {
-      const { earnedGpu } = req.body;
-      
-      // Находим пользователя, который пригласил этого человека
       const referrer = await User.findOne({ "invitedFriends.friendId": user_id });
       if (referrer) {
         const friend = referrer.invitedFriends.find(f => f.friendId === user_id);
@@ -324,7 +321,7 @@ app.get('/', (req, res) => { res.json({ status: 'OK', message: 'CryptoGPU Backen
 
 // ========== API ДЛЯ БОТА (засчёт реферала) ==========
 app.post('/api/bot/registerRef', async (req, res) => {
-  const { userId, referrerId } = req.body;
+  const { userId, referrerId, name } = req.body;
   
   try {
     const existingUser = await User.findOne({ userId: userId });
@@ -342,16 +339,19 @@ app.post('/api/bot/registerRef', async (req, res) => {
       return res.json({ success: false, error: 'Already invited' });
     }
     
+    // Сохраняем реальное имя пользователя
+    const friendName = name || `User_${userId.slice(-5)}`;
+    
     referrer.invitedFriends.push({
       friendId: userId,
-      friendName: `User_${userId.slice(-5)}`,
+      friendName: friendName,
       date: new Date().toLocaleDateString(),
       earnedGpu: 0
     });
     referrer.friends = referrer.invitedFriends.length;
     await referrer.save();
     
-    console.log(`✅ Реферал засчитан! ${referrerId} → ${userId}`);
+    console.log(`✅ Реферал засчитан! ${referrerId} → ${userId} (${friendName})`);
     res.json({ success: true, message: 'Referral counted' });
     
   } catch (error) {
