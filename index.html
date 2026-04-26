@@ -419,7 +419,6 @@ async function handleClaimReward(e) {
 async function claimReferralReward(cardIndex) {
   await syncBalance();
   
-  const card = gpuTemplates[cardIndex];
   const state = gpuStates[cardIndex];
   if (!state || state.earnedTon < state.totalTon - 0.01) {
     tg.showAlert("⏳ Майнинг ещё не завершён");
@@ -440,10 +439,14 @@ async function claimReferralReward(cardIndex) {
   state.earnedGpu = 0;
   state.startedAt = 0;
   state.durationMs = 0;
+  
   updateUI();
   renderCard(cardIndex);
   await saveGameState();
-  await loadUserData();
+  
+  // Обновляем статус реферальных карт (НЕ ТРОГАЕМ СПИСОК ДРУЗЕЙ)
+  updateReferralCardsStatus();
+  
   tg.showAlert(`🎉 Вы получили ${state.totalTon} TON и ${state.totalGpu} GPU!`);
 }
 
