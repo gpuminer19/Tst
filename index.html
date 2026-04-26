@@ -30,36 +30,30 @@
   .card-info { flex: 1; }
   .card-info h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
   .badge { background: rgba(0, 212, 255, 0.2); padding: 2px 6px; border-radius: 20px; font-size: 8px; color: #00D4FF; }
-  .period-badge { background: linear-gradient(95deg, #FFB347, #FF8C00); color: #0B0E1A; font-size: 8px; padding: 2px 8px; border-radius: 20px; font-weight: bold; }
-  .referral-period-badge { background: linear-gradient(95deg, #6C5CE7, #4834D4); color: #fff; font-size: 8px; padding: 2px 8px; border-radius: 20px; font-weight: bold; }
   .rewards-info { display: flex; gap: 10px; font-size: 10px; color: #A0B4E0; margin-bottom: 6px; flex-wrap: wrap; align-items: center; }
   .rewards-info img { width: 12px; height: 12px; margin-left: 2px; }
-  
-  .buy-btn-new { background: linear-gradient(135deg, #6C5CE7, #4834D4); border: none; font-weight: 700; font-size: 12px; padding: 8px 16px; border-radius: 40px; color: #fff; width: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3); }
-  .buy-btn-new:active { transform: scale(0.97); }
-  .buy-btn-orange { background: linear-gradient(135deg, #FF8C00, #FF6600); border: none; font-weight: 700; font-size: 12px; padding: 8px 16px; border-radius: 40px; color: #fff; width: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(255, 140, 0, 0.3); }
-  .buy-btn-orange:active { transform: scale(0.97); }
-  .claim-btn-new { background: linear-gradient(135deg, #00E676, #00C853); border: none; font-weight: 700; font-size: 12px; padding: 8px 16px; border-radius: 40px; color: #fff; width: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(0, 230, 118, 0.3); }
-  .claim-btn-new:active { transform: scale(0.97); }
-  
+  button { background: linear-gradient(95deg, #1A2A5E, #0F1A3A); border: none; font-weight: 600; font-size: 12px; padding: 8px 12px; border-radius: 40px; color: white; width: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.15s; }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.5; transform: none; cursor: not-allowed; }
+  .claim-btn { background: linear-gradient(95deg, #008A5C, #00A86B); }
+  .buy-btn { background: linear-gradient(95deg, #1A2A5E, #0F1A3A); }
   .progress-bar { width: 100%; height: 24px; background: rgba(0, 0, 0, 0.5); border-radius: 40px; overflow: hidden; position: relative; margin-top: 6px; border: 1px solid rgba(0, 212, 255, 0.3); }
-  .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #6C5CE7, #4834D4); border-radius: 40px; transition: width 0.2s linear; }
+  .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00D4FF, #0066FF); border-radius: 40px; transition: width 0.2s linear; }
   .progress-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: bold; gap: 3px; }
-  
   .ref-stats { background: linear-gradient(135deg, #1A1F35, #11152A); margin: 16px; padding: 16px; border-radius: 28px; text-align: center; border: 1px solid rgba(255, 180, 71, 0.3); }
   .friend-count { font-size: 40px; font-weight: 800; background: linear-gradient(135deg, #FFB347, #FF8C00); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .friends-list { margin-top: 16px; max-height: 250px; overflow-y: auto; }
   .friend-item { display: flex; align-items: center; padding: 10px 12px; background: rgba(0, 0, 0, 0.3); border-radius: 20px; margin-bottom: 8px; }
-  .friend-avatar { width: 32px; height: 32px; background: linear-gradient(135deg, #6C5CE7, #4834D4); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+  .friend-avatar { width: 32px; height: 32px; background: linear-gradient(135deg, #00D4FF, #0066FF); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
   .friend-name { font-weight: 500; font-size: 14px; flex: 1; }
-  .friend-earned { display: flex; align-items: center; gap: 4px; font-weight: bold; font-size: 14px; color: #6C5CE7; }
+  .friend-earned { display: flex; align-items: center; gap: 4px; font-weight: bold; font-size: 14px; color: #00D4FF; }
   .friend-earned img { width: 16px; height: 16px; }
   .ref-link-box { background: rgba(0, 0, 0, 0.4); margin: 12px 16px; padding: 10px 14px; border-radius: 60px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .ref-link-box span { font-size: 10px; font-family: monospace; color: #FFD699; word-break: break-all; }
   .copy-btn { width: auto; padding: 6px 14px; background: #FF8C00; margin: 0; border-radius: 40px; }
   .bottom-nav { position: fixed; bottom: 10px; left: 10px; right: 10px; background: rgba(8, 12, 24, 0.95); backdrop-filter: blur(20px); border-radius: 44px; display: flex; justify-content: space-around; padding: 5px 8px; border: 1px solid rgba(0, 212, 255, 0.25); z-index: 100; }
   .nav-btn { background: transparent !important; box-shadow: none !important; width: auto !important; padding: 8px 16px !important; font-size: 20px !important; color: #5A6A8A !important; margin: 0 !important; }
-  .nav-btn.active { color: #6C5CE7 !important; background: rgba(108, 92, 231, 0.15) !important; border-radius: 40px; }
+  .nav-btn.active { color: #00D4FF !important; background: rgba(0, 212, 255, 0.15) !important; border-radius: 40px; }
   .tab { display: none; animation: fade 0.25s ease; }
   .tab.active { display: block; }
   @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
@@ -67,10 +61,10 @@
   .deposit-box { margin: 16px; padding: 18px; border-radius: 24px; background: linear-gradient(135deg, #1A1F35, #11152A); border: 1px solid rgba(0, 212, 255, 0.3); }
   .deposit-box h3 { margin-bottom: 12px; font-size: 16px; }
   .deposit-box label { display: block; font-size: 11px; color: #8EA3D4; margin-bottom: 6px; }
-  .deposit-box input, .deposit-box textarea { width: 100%; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid #6C5CE7; border-radius: 12px; padding: 12px; font-size: 14px; outline: none; margin-bottom: 10px; }
+  .deposit-box input, .deposit-box textarea { width: 100%; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 12px; padding: 12px; font-size: 14px; outline: none; margin-bottom: 10px; }
   .deposit-box textarea { resize: none; font-family: monospace; }
-  .deposit-box input:focus, .deposit-box textarea:focus { border-color: #6C5CE7; }
-  .deposit-box .pay-btn { margin-top: 5px; background: linear-gradient(95deg, #6C5CE7, #4834D4); color: #fff; border-radius: 40px; padding: 10px; }
+  .deposit-box input:focus, .deposit-box textarea:focus { border-color: #00D4FF; }
+  .deposit-box .pay-btn { margin-top: 5px; background: linear-gradient(95deg, #00D4FF, #0066FF); color: #0B0E1A; border-radius: 40px; }
   .withdraw-btn { background: linear-gradient(95deg, #FF8C00, #FF6600); border-radius: 40px; }
   .pay-info { background: rgba(0,0,0,0.4); border-radius: 14px; padding: 12px; margin-top: 14px; font-size: 12px; word-break: break-all; }
   .pay-info .row { margin-bottom: 8px; }
@@ -88,32 +82,32 @@
   .history-date { font-size: 10px; color: #6B7CA8; }
   .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; }
   .status-pending { background: #FF8C00; color: #0B0E1A; }
-  .status-completed { background: #00C853; }
+  .status-completed { background: #00A86B; }
   .status-cancelled { background: #DC2626; }
   
   .referral-cards-grid { display: flex; flex-direction: column; gap: 12px; margin: 16px; }
   .locked-card { opacity: 0.6; filter: grayscale(0.3); }
   .progress-bar-small { background: #1A1F35; border-radius: 6px; height: 4px; margin-top: 3px; overflow: hidden; }
-  .progress-fill-small { background: #6C5CE7; border-radius: 6px; height: 4px; }
+  .progress-fill-small { background: #00D4FF; border-radius: 6px; height: 4px; }
   .exchange-rate-box { background: rgba(0,0,0,0.2); border-radius: 16px; padding: 12px; margin-bottom: 16px; text-align: center; }
-  .exchange-rate { font-size: 24px; font-weight: bold; color: #6C5CE7; }
+  .exchange-rate { font-size: 24px; font-weight: bold; color: #00D4FF; }
   .exchange-note { font-size: 10px; color: #FFB347; margin-top: 8px; }
   .exchange-info { margin-top: 16px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; text-align: center; }
   .exchange-info-title { font-size: 11px; color: #FFD700; }
   .exchange-info-text { font-size: 10px; color: #8EA3D4; margin-top: 5px; }
   .flex-row { display: flex; gap: 10px; align-items: center; margin-top: 5px; margin-bottom: 10px; }
-  .flex-row input { flex: 2; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid #6C5CE7; border-radius: 12px; padding: 12px; }
+  .flex-row input { flex: 2; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid #00D4FF; border-radius: 12px; padding: 12px; }
   .flex-row button { flex: 1; }
-  .sell-btn { background: #00C853; border-radius: 40px; }
-  .buy-btn-exchange { background: #6C5CE7; border-radius: 40px; }
+  .sell-btn { background: #00A86B; border-radius: 40px; }
+  .buy-btn-exchange { background: #00D4FF; color: #0B0E1A; border-radius: 40px; }
   .estimate-text { font-size: 11px; color: #6B7CA8; }
   .tasks-container { margin: 16px; }
   .tasks-title { margin-bottom: 16px; font-size: 18px; }
   .task-card { margin-bottom: 12px; }
   .task-desc { font-size: 12px; color: #8EA3D4; margin: 4px 0; }
   .task-rewards { margin-top: 8px; }
-  .task-btn { margin-top: 8px; background: linear-gradient(135deg, #6C5CE7, #4834D4) !important; border-radius: 40px; }
-  .task-completed { margin-top: 8px; font-size: 11px; color: #00C853; }
+  .task-btn { margin-top: 8px; background: #00A86B !important; border-radius: 40px; }
+  .task-completed { margin-top: 8px; font-size: 11px; color: #00A86B; }
   .task-pending { margin-top: 8px; font-size: 11px; color: #FF8C00; }
 </style>
 </head>
@@ -171,16 +165,16 @@
     <div class="card" id="refCardBasic" style="border-color:#FFB347;">
       <img src="friendminer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFB347);">
       <div class="card-info">
-        <h3>🤝 Friend Miner <span class="referral-period-badge">Каждые 12 часов</span></h3>
+        <h3>🤝 Friend Miner <span class="badge" style="background:#FF8C20;">10 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
         <div class="rewards-info"><span>+1 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+5 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
         <div id="refCardBasicStatus"></div>
       </div>
     </div>
     
-    <div class="card" id="refCardUltra" style="border-color:#6C5CE7;">
-      <img src="brominer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #6C5CE7);">
+    <div class="card" id="refCardUltra" style="border-color:#00D4FF;">
+      <img src="brominer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #00D4FF);">
       <div class="card-info">
-        <h3>👥 Bro Miner <span class="referral-period-badge">Каждые 12 часов</span></h3>
+        <h3>👥 Bro Miner <span class="badge" style="background:#00D4FF;">50 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
         <div class="rewards-info"><span>+5 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+25 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
         <div id="refCardUltraStatus"></div>
       </div>
@@ -189,7 +183,7 @@
     <div class="card" id="refCardLegendary" style="border-color:#FFD700;">
       <img src="nexusminer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFD700);">
       <div class="card-info">
-        <h3>💎 Nexus Miner <span class="referral-period-badge">Каждые 12 часов</span></h3>
+        <h3>💎 Nexus Miner <span class="badge" style="background:#FFD700; color:#0B0E1A;">150 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
         <div class="rewards-info"><span>+20 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+100 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
         <div id="refCardLegendaryStatus"></div>
       </div>
@@ -311,12 +305,10 @@ let playerData = {
   transactions: []
 };
 
-// ========== НОВАЯ СТРУКТУРА КАРТ (вечный фарм, 12 часов) ==========
 let cardStates = [];
 let cardTimers = [];
 let isClaiming = [];
 
-// Шаблоны карт с указанием времени "12 часов"
 const gpuTemplates = [
   { name: "Basic Miner", price: 1, priceCurrency: "gpu", tonReward: 0, gpuReward: 5, image: "basicminer.png", claimTime: "12 часов" },
   { name: "Normal Miner", price: 2, priceCurrency: "ton", tonReward: 2.4, gpuReward: 4, image: "normalminer.png", claimTime: "12 часов" },
@@ -331,7 +323,6 @@ const gpuTemplates = [
 
 const EXCHANGE_RATE = 0.001;
 
-// ========== ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЯ КАРТ ==========
 function initCardStates() {
   cardStates = gpuTemplates.map(() => ({
     owned: false,
@@ -342,7 +333,6 @@ function initCardStates() {
   isClaiming = gpuTemplates.map(() => false);
 }
 
-// ========== ОЧИСТКА ВСЕХ ТАЙМЕРОВ ==========
 function clearAllCardTimers() {
   for (let i = 0; i < cardTimers.length; i++) {
     if (cardTimers[i]) clearInterval(cardTimers[i]);
@@ -350,7 +340,6 @@ function clearAllCardTimers() {
   cardTimers = [];
 }
 
-// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 function updateUI() {
   document.getElementById("ton").innerText = playerData.ton.toFixed(2);
   document.getElementById("gpuBalance").innerText = playerData.gpuTokens;
@@ -377,7 +366,7 @@ function renderHistory() {
     else { statusText = '❌ Отклонено'; statusClass = 'status-cancelled'; }
     
     const typeText = t.type === 'deposit' ? '💎 Пополнение' : '📤 Вывод';
-    const amountColor = t.type === 'deposit' ? '#00C853' : '#FF8C00';
+    const amountColor = t.type === 'deposit' ? '#00A86B' : '#FF8C00';
     
     return `<div class="history-item"><div class="history-info"><div class="history-amount" style="color:${amountColor}">${t.type === 'deposit' ? '+' : '-'} ${t.amount} <img src="ton.png" style="width: 14px; height: 14px;"></div><div class="history-date">${formatDate(t.createdAt)}</div><div style="font-size:10px;">${typeText}</div></div><div><span class="status-badge ${statusClass}">${statusText}</span></div></div>`;
   }).join('');
@@ -438,7 +427,6 @@ function updateRefLink() {
   document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
 }
 
-// ========== ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ ==========
 async function refreshBalanceForAnyAction() {
     const result = await apiRequest("register", {});
     if (result && result.success) {
@@ -452,7 +440,6 @@ async function refreshBalanceForAnyAction() {
         renderFriendsList();
         renderHistory();
         
-        // Восстанавливаем состояние карт с сервера
         if (result.data.cardStates) {
           for (let i = 0; i < result.data.cardStates.length; i++) {
             if (result.data.cardStates[i].owned) {
@@ -479,7 +466,6 @@ async function syncBalance() {
   return playerData.ton;
 }
 
-// ========== ЛОГИКА 12-ЧАСОВОГО ФАРМА ==========
 function startRewardTimer(idx) {
   if (cardTimers[idx]) clearInterval(cardTimers[idx]);
   
@@ -490,13 +476,11 @@ function startRewardTimer(idx) {
     const now = Date.now();
     const timeSinceLastClaim = now - state.lastClaim;
     
-    // Если прошло 12+ часов и ещё не готово к забору
     if (timeSinceLastClaim >= CLAIM_INTERVAL && !state.readyToClaim && !isClaiming[idx]) {
       state.readyToClaim = true;
       renderCard(idx);
     }
     
-    // Обновляем отображение таймера
     const timerElement = document.getElementById(`timer_${idx}`);
     if (timerElement && !state.readyToClaim && !isClaiming[idx]) {
       const remaining = Math.max(0, CLAIM_INTERVAL - timeSinceLastClaim);
@@ -505,7 +489,6 @@ function startRewardTimer(idx) {
       timerElement.innerHTML = `⏱ ${hours}ч ${minutes}м`;
     }
     
-    // Обновляем прогресс-бар
     const progressFill = document.getElementById(`progress_fill_${idx}`);
     if (progressFill && !state.readyToClaim && !isClaiming[idx]) {
       const progress = Math.min(100, (timeSinceLastClaim / CLAIM_INTERVAL) * 100);
@@ -528,7 +511,6 @@ async function buyGPU(idx) {
     return;
   }
   
-  // Проверка средств
   if (gpu.priceCurrency === "gpu") {
     if (playerData.gpuTokens < gpu.price) {
       tg.showAlert(`❌ Недостаточно GPU. Нужно: ${gpu.price}`);
@@ -561,10 +543,7 @@ async function buyGPU(idx) {
 }
 
 async function claimReward(idx) {
-  if (isClaiming[idx]) {
-    console.log("⏳ Уже обрабатывается запрос");
-    return;
-  }
+  if (isClaiming[idx]) return;
   
   const state = cardStates[idx];
   const gpu = gpuTemplates[idx];
@@ -642,8 +621,8 @@ function renderCard(idx) {
           <span>+${gpu.gpuReward} <img src="gpu.png" style="width: 10px; height: 10px;"></span>
           <span>⏱ ${gpu.claimTime || '12 часов'}</span>
         </div>
-        ${!isReferralCard && gpu.price > 0 ? `<button class="buy-btn-new buy-btn" data-index="${idx}">Купить за ${priceText}</button>` : 
-          `<button class="buy-btn-new buy-btn" data-index="${idx}" ${!canBuy ? 'disabled style="opacity:0.5;"' : ''}>${isReferralCard ? (canBuy ? '🎁 Получить карту' : `🔒 ${priceText}`) : '⭐ Реферальная карта'}</button>`}
+        ${!isReferralCard && gpu.price > 0 ? `<button class="buy-btn" data-index="${idx}">Купить за ${priceText}</button>` : 
+          `<button class="buy-btn" data-index="${idx}" ${!canBuy ? 'disabled style="opacity:0.5;"' : ''}>${isReferralCard ? (canBuy ? '🎁 Получить карту' : `🔒 ${priceText}`) : '⭐ Реферальная карта'}</button>`}
       </div>
     `;
     const btn = card.querySelector('.buy-btn');
@@ -657,7 +636,7 @@ function renderCard(idx) {
           <span>+${gpu.tonReward} <img src="ton.png" style="width: 10px; height: 10px;"></span>
           <span>+${gpu.gpuReward} <img src="gpu.png" style="width: 10px; height: 10px;"></span>
         </div>
-        <button class="claim-btn-new claim-btn" data-index="${idx}">🎁 Забрать награду!</button>
+        <button class="claim-btn" data-index="${idx}">🎁 Забрать награду!</button>
       </div>
     `;
     const btn = card.querySelector('.claim-btn');
@@ -671,7 +650,7 @@ function renderCard(idx) {
           <span>+${gpu.tonReward} <img src="ton.png" style="width: 10px; height: 10px;"></span>
           <span>+${gpu.gpuReward} <img src="gpu.png" style="width: 10px; height: 10px;"></span>
         </div>
-        <button class="claim-btn-new" disabled style="opacity:0.5;">⏳ Обработка...</button>
+        <button class="claim-btn" disabled style="opacity:0.5;">⏳ Обработка...</button>
       </div>
     `;
   } else {
@@ -717,7 +696,6 @@ function initGrid() {
   }
 }
 
-// ========== АКТИВАЦИЯ РЕФЕРАЛЬНЫХ КАРТ ==========
 async function checkAndActivateReferralCards() {
   for (let i = 6; i < gpuTemplates.length; i++) {
     const card = gpuTemplates[i];
@@ -750,10 +728,10 @@ function updateReferralCardsStatus() {
     
     if (activeCount >= 5 && !isOwned) {
       container.classList.remove("locked-card");
-      statusDiv.innerHTML = `<button class="buy-btn-new" onclick="buyGPU(${tier.index})" style="background:#FF8C00;">🎁 Получить карту!</button>`;
+      statusDiv.innerHTML = `<button class="buy-btn" onclick="buyGPU(${tier.index})" style="background:#FF8C00;">🎁 Получить карту!</button>`;
     } else if (isOwned) {
       container.classList.remove("locked-card");
-      statusDiv.innerHTML = '<div style="color:#00C853;">✅ Карта получена!</div>';
+      statusDiv.innerHTML = '<div style="color:#00A86B;">✅ Карта получена!</div>';
     } else {
       container.classList.add("locked-card");
       const needed = 5 - activeCount;
@@ -762,7 +740,6 @@ function updateReferralCardsStatus() {
   }
 }
 
-// ========== РАБОТА С БЭКЕНДОМ ==========
 async function apiRequest(action, additionalData = {}) {
   try {
     const response = await fetch(API_URL, {
@@ -865,7 +842,6 @@ async function createWithdraw(amount, wallet) {
   return false;
 }
 
-// ========== ЗАДАНИЯ ==========
 async function loadTasksGame() {
   const container = document.getElementById("tasksListGame");
   if (!container) return;
@@ -964,7 +940,6 @@ function updateTaskButtonToPending(taskId) {
   }
 }
 
-// ========== ОБМЕН ВАЛЮТ ==========
 const sellInput = document.getElementById("sellGpuAmount");
 const buyInput = document.getElementById("buyGpuAmount");
 const sellEstimate = document.getElementById("sellEstimate");
@@ -1046,7 +1021,6 @@ function showPayInfo(deposit) {
 
 function copyText(text) { navigator.clipboard.writeText(text); tg.showAlert("📋 Скопировано"); }
 
-// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ==========
 window.openTab = async function(id, btn) {
     await refreshBalanceForAnyAction();
     
