@@ -633,7 +633,7 @@ async function loadReferrals() {
   }
 }
 
-// ========== ЗАДАНИЯ ==========
+// ========== ЗАДАНИЯ (МГНОВЕННОЕ ОБНОВЛЕНИЕ, БЕЗ СООБЩЕНИЙ) ==========
 async function loadTasksGame() {
   const container = document.getElementById("tasksListGame");
   if (!container) return;
@@ -655,16 +655,18 @@ async function loadTasksGame() {
         statusHtml = '<div class="task-pending">⏳ Ожидает проверки администратора</div>';
       } else {
         const hasUrl = task.taskUrl && task.taskUrl.length > 0;
-        buttonHtml = hasUrl 
-          ? `<button class="claim-btn task-btn" onclick="openTaskUrl('${task.id}', '${task.taskUrl}')">🔗 Перейти и выполнить</button>`
-          : `<button class="claim-btn task-btn" onclick="completeTask('${task.id}')">✅ Выполнить</button>`;
+        const onclickAttr = hasUrl 
+          ? `openTaskUrl('${task.id}', '${escapeHtml(task.taskUrl)}')`
+          : `completeTask('${task.id}')`;
+        const btnText = hasUrl ? "🔗 Перейти и выполнить" : "✅ Выполнить";
+        buttonHtml = `<button class="claim-btn task-btn" onclick="${onclickAttr}">${btnText}</button>`;
       }
       
       return `
         <div class="card task-card">
           <div class="card-info">
-            <h3>${task.title}</h3>
-            <div class="task-desc">${task.description}</div>
+            <h3>${escapeHtml(task.title)}</h3>
+            <div class="task-desc">${escapeHtml(task.description)}</div>
             <div class="rewards-info task-rewards">
               <span>💰 +${task.rewardTon} <img src="ton.png" style="width: 12px; height: 12px;"></span>
               <span>⚡ +${task.rewardGpu} <img src="gpu.png" style="width: 12px; height: 12px;"></span>
@@ -680,28 +682,59 @@ async function loadTasksGame() {
   }
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>]/g, function(m) {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
+}
+
 async function openTaskUrl(taskId, url) {
-  tg.openTelegramLink(url);
-  tg.showAlert("⏳ Проверяем выполнение задания...");
+  // МГНОВЕННО меняем интерфейс
+  updateTaskButtonToPending(taskId);
   
-  setTimeout(async () => {
-    const result = await apiRequest("tasks/complete", { taskId });
-    if (result?.success) {
-      tg.showAlert("✅ Задание отмечено как выполненное! Администратор проверит и начислит награду.");
-      await loadTasksGame();
-    } else {
-      tg.showAlert("❌ " + (result?.error || "Ошибка"));
-    }
-  }, 5000);
+  // Открываем ссылку
+  let cleanUrl = url.trim();
+  if (!cleanUrl.startsWith('http') && !cleanUrl.startsWith('t.me')) {
+    cleanUrl = 'https://' + cleanUrl;
+  }
+  window.open(cleanUrl, '_blank');
+  
+  // Отправляем запрос на сервер
+  try {
+    await apiRequest("tasks/complete", { taskId });
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 async function completeTask(taskId) {
-  const result = await apiRequest("tasks/complete", { taskId });
-  if (result?.success) {
-    tg.showAlert("✅ Задание отмечено как выполненное! Администратор проверит и начислит награду.");
-    await loadTasksGame();
-  } else {
-    tg.showAlert("❌ " + (result?.error || "Ошибка"));
+  // МГНОВЕННО меняем интерфейс
+  updateTaskButtonToPending(taskId);
+  
+  // Отправляем запрос на сервер
+  try {
+    await apiRequest("tasks/complete", { taskId });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function updateTaskButtonToPending(taskId) {
+  // Находим все карточки заданий
+  const taskCards = document.querySelectorAll('.task-card');
+  for (const card of taskCards) {
+    const btn = card.querySelector('.task-btn');
+    if (btn && btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(taskId)) {
+      const btnContainer = btn.parentElement;
+      if (btnContainer) {
+        btnContainer.innerHTML = '<div class="task-pending">⏳ Ожидает проверки администратора</div>';
+      }
+      break;
+    }
   }
 }
 
