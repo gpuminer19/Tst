@@ -166,7 +166,7 @@
       <img src="friendminer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFB347);">
       <div class="card-info">
         <h3>🤝 Friend Miner <span class="badge" style="background:#FF8C20;">10 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
-        <div class="rewards-info"><span>+1 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+5 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
+        <div class="rewards-info"><span>+0.1 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+15 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
         <div id="refCardBasicStatus"></div>
       </div>
     </div>
@@ -175,7 +175,7 @@
       <img src="brominer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #00D4FF);">
       <div class="card-info">
         <h3>👥 Bro Miner <span class="badge" style="background:#00D4FF;">50 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
-        <div class="rewards-info"><span>+5 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+25 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
+        <div class="rewards-info"><span>+0.5 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+100 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
         <div id="refCardUltraStatus"></div>
       </div>
     </div>
@@ -184,7 +184,7 @@
       <img src="nexusminer.png" class="gpu-img" style="filter:drop-shadow(0 0 6px #FFD700);">
       <div class="card-info">
         <h3>💎 Nexus Miner <span class="badge" style="background:#FFD700; color:#0B0E1A;">150 друзей по 100 <img src="gpu.png" style="width: 10px; height: 10px;"></span></h3>
-        <div class="rewards-info"><span>+20 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+100 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
+        <div class="rewards-info"><span>+1.5 <img src="ton.png" style="width: 10px; height: 10px;"></span><span>+200 <img src="gpu.png" style="width: 10px; height: 10px;"></span><span>⏱ 12 часов</span></div>
         <div id="refCardLegendaryStatus"></div>
       </div>
     </div>
@@ -309,16 +309,17 @@ let cardStates = [];
 let cardTimers = [];
 let isClaiming = [];
 
+// ========== ОБНОВЛЁННЫЙ СПИСОК МАЙНЕРОВ ==========
 const gpuTemplates = [
-  { name: "Basic Miner", price: 1, priceCurrency: "gpu", tonReward: 0, gpuReward: 5, image: "basicminer.png", claimTime: "12 часов" },
-  { name: "Normal Miner", price: 2, priceCurrency: "ton", tonReward: 2.4, gpuReward: 4, image: "normalminer.png", claimTime: "12 часов" },
-  { name: "Pro Miner", price: 3, priceCurrency: "ton", tonReward: 3.6, gpuReward: 6, image: "prominer.png", claimTime: "12 часов" },
-  { name: "Ultra Miner", price: 5, priceCurrency: "ton", tonReward: 6, gpuReward: 10, image: "ultraminer.png", claimTime: "12 часов" },
-  { name: "Legendary Miner", price: 50, priceCurrency: "ton", tonReward: 60, gpuReward: 200, image: "legendaryminer.png", claimTime: "12 часов" },
-  { name: "X Miner", price: 100, priceCurrency: "ton", tonReward: 120, gpuReward: 500, image: "xminer.png", claimTime: "12 часов" },
-  { name: "Friend Miner", price: 0, priceCurrency: "ref", tonReward: 1, gpuReward: 5, image: "friendminer.png", isReferral: true, requiredActive: 10, requiredEarned: 100, claimTime: "12 часов" },
-  { name: "Bro Miner", price: 0, priceCurrency: "ref", tonReward: 5, gpuReward: 25, image: "brominer.png", isReferral: true, requiredActive: 50, requiredEarned: 100, claimTime: "12 часов" },
-  { name: "Nexus Miner", price: 0, priceCurrency: "ref", tonReward: 20, gpuReward: 100, image: "nexusminer.png", isReferral: true, requiredActive: 150, requiredEarned: 100, claimTime: "12 часов" }
+  { name: "Basic Miner", price: 1, priceCurrency: "gpu", tonReward: 0, gpuReward: 15, image: "basicminer.png", claimTime: "12 часов" },
+  { name: "Normal Miner", price: 2, priceCurrency: "ton", tonReward: 0.03, gpuReward: 4, image: "normalminer.png", claimTime: "12 часов" },
+  { name: "Pro Miner", price: 10, priceCurrency: "ton", tonReward: 0.16, gpuReward: 40, image: "prominer.png", claimTime: "12 часов" },
+  { name: "Ultra Miner", price: 50, priceCurrency: "ton", tonReward: 0.83, gpuReward: 220, image: "ultraminer.png", claimTime: "12 часов" },
+  { name: "Legendary Miner", price: 100, priceCurrency: "ton", tonReward: 1.6, gpuReward: 450, image: "legendaryminer.png", claimTime: "12 часов" },
+  { name: "Minex", price: 500, priceCurrency: "ton", tonReward: 7, gpuReward: 2500, image: "xminer.png", claimTime: "12 часов" },
+  { name: "Friend Miner", price: 0, priceCurrency: "ref", tonReward: 0.1, gpuReward: 15, image: "friendminer.png", isReferral: true, requiredActive: 10, requiredEarned: 100, claimTime: "12 часов" },
+  { name: "Bro Miner", price: 0, priceCurrency: "ref", tonReward: 0.5, gpuReward: 100, image: "brominer.png", isReferral: true, requiredActive: 50, requiredEarned: 100, claimTime: "12 часов" },
+  { name: "Nexus Miner", price: 0, priceCurrency: "ref", tonReward: 1.5, gpuReward: 200, image: "nexusminer.png", isReferral: true, requiredActive: 150, requiredEarned: 100, claimTime: "12 часов" }
 ];
 
 const EXCHANGE_RATE = 0.001;
@@ -576,9 +577,6 @@ async function claimReward(idx) {
     await saveGameState();
     await refreshBalanceForAnyAction();
     
-    // ⚠️ ВНИМАНИЕ: Эндпоинт updateFriendEarned УДАЛЁН (безопасность)
-    // Начисление GPU рефералам теперь происходит только через сервер
-    
     tg.showAlert(`🎉 Вы получили ${gpu.tonReward} TON и ${gpu.gpuReward} GPU! Следующая награда через 12 часов.`);
   } catch (error) {
     console.error("Claim error:", error);
@@ -712,9 +710,9 @@ async function checkAndActivateReferralCards() {
 
 function updateReferralCardsStatus() {
   const tiers = [
-    { id: "refCardBasic", requiredEarned: 100, index: 6, rewardTon: 1, rewardGpu: 5, image: "friendminer.png" },
-    { id: "refCardUltra", requiredEarned: 100, index: 7, rewardTon: 5, rewardGpu: 25, image: "brominer.png" },
-    { id: "refCardLegendary", requiredEarned: 100, index: 8, rewardTon: 20, rewardGpu: 100, image: "nexusminer.png" }
+    { id: "refCardBasic", requiredEarned: 100, index: 6, rewardTon: 0.1, rewardGpu: 15, image: "friendminer.png" },
+    { id: "refCardUltra", requiredEarned: 100, index: 7, rewardTon: 0.5, rewardGpu: 100, image: "brominer.png" },
+    { id: "refCardLegendary", requiredEarned: 100, index: 8, rewardTon: 1.5, rewardGpu: 200, image: "nexusminer.png" }
   ];
   
   for (const tier of tiers) {
