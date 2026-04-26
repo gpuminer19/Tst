@@ -26,7 +26,7 @@
   .gpu-currency { background: linear-gradient(135deg, #FFB347, #FF8C00); border-radius: 30px; padding: 2px 6px; font-size: 9px; font-weight: bold; color: #1A1F2E; display: inline-flex; align-items: center; gap: 2px; }
   .grid { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
   .card { background: rgba(12, 18, 32, 0.75); backdrop-filter: blur(12px); border-radius: 24px; padding: 12px; display: flex; gap: 12px; align-items: center; border: 1px solid rgba(0, 212, 255, 0.2); }
-  .gpu-img { width: 98px; height: 98px; object-fit: contain; background: rgba(0, 0, 0, 0.4); border-radius: 18px; padding: 3px; }
+  .gpu-img { width: 65px; height: 65px; object-fit: contain; background: rgba(0, 0, 0, 0.4); border-radius: 18px; padding: 8px; }
   .card-info { flex: 1; }
   .card-info h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
   .badge { background: rgba(0, 212, 255, 0.2); padding: 2px 6px; border-radius: 20px; font-size: 8px; color: #00D4FF; }
@@ -88,6 +88,25 @@
   .locked-card { opacity: 0.6; filter: grayscale(0.3); }
   .progress-bar-small { background: #1A1F35; border-radius: 6px; height: 4px; margin-top: 3px; overflow: hidden; }
   .progress-fill-small { background: #00D4FF; border-radius: 6px; height: 4px; }
+  .exchange-rate-box { background: rgba(0,0,0,0.2); border-radius: 16px; padding: 12px; margin-bottom: 16px; text-align: center; }
+  .exchange-rate { font-size: 24px; font-weight: bold; color: #00D4FF; }
+  .exchange-note { font-size: 10px; color: #FFB347; margin-top: 8px; }
+  .exchange-info { margin-top: 16px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; text-align: center; }
+  .exchange-info-title { font-size: 11px; color: #FFD700; }
+  .exchange-info-text { font-size: 10px; color: #8EA3D4; margin-top: 5px; }
+  .flex-row { display: flex; gap: 10px; align-items: center; margin-top: 5px; margin-bottom: 10px; }
+  .flex-row input { flex: 2; }
+  .flex-row button { flex: 1; }
+  .sell-btn { background: #00A86B; }
+  .buy-btn { background: #00D4FF; }
+  .estimate-text { font-size: 11px; color: #6B7CA8; }
+  .tasks-container { margin: 16px; }
+  .tasks-title { margin-bottom: 16px; font-size: 18px; }
+  .task-card { margin-bottom: 12px; }
+  .task-desc { font-size: 12px; color: #8EA3D4; margin: 4px 0; }
+  .task-rewards { margin-top: 8px; }
+  .task-btn { margin-top: 8px; }
+  .task-completed { margin-top: 8px; font-size: 11px; color: #00A86B; }
 </style>
 </head>
 <body>
@@ -175,8 +194,53 @@
   </div>
 </div>
 
-<div id="staking" class="tab"><div class="ref-stats"><i class="fa-solid fa-chart-line" style="font-size:48px;"></i><h3>Staking Pool</h3><p>Скоро</p></div></div>
-<div id="tasks" class="tab"><div class="ref-stats"><i class="fa-solid fa-list-check" style="font-size:48px;"></i><h3>Задания</h3><p>Скоро</p></div></div>
+<div id="staking" class="tab">
+  <div class="deposit-box" style="margin-bottom: 20px;">
+    <h3>Обмен валют</h3>
+    <div class="exchange-rate-box">
+      <div style="font-size: 12px; color: #8EA3D4;">Текущий курс</div>
+      <div class="exchange-rate" id="exchangeRate">1 GPU = 0.001 TON</div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+      <label>📤 Продать GPU за TON</label>
+      <div class="flex-row">
+        <input type="number" id="sellGpuAmount" placeholder="Количество GPU">
+        <button id="sellGpuBtn" class="sell-btn"> Продать</button>
+      </div>
+      <div class="estimate-text" id="sellEstimate">Вы получите: 0 TON</div>
+    </div>
+    
+    <div style="margin-bottom: 10px;">
+      <label>📥 Купить GPU за TON</label>
+      <div class="flex-row">
+        <input type="number" id="buyGpuAmount" placeholder="Количество TON">
+        <button id="buyGpuBtn" class="buy-btn">Купить</button>
+      </div>
+      <div class="estimate-text" id="buyEstimate">Вы получите: 0 GPU</div>
+    </div>
+    
+    <div class="exchange-info">
+      <div class="exchange-info-title">💡 Не спешите продавать</div>
+      <div class="exchange-info-text">Каждый месяц стоимость 1 GPU увеличивается в 2 раза</div>
+    </div>
+  </div>
+  
+  <div class="ref-stats">
+    <i class="fa-solid fa-chart-line" style="font-size:48px;"></i>
+    <h3>Staking Pool</h3>
+    <p>Скоро</p>
+  </div>
+</div>
+
+<div id="tasks" class="tab">
+  <div class="tasks-container">
+    <h3 class="tasks-title">📋 Ежедневные задания</h3>
+    <div id="tasksListGame">
+      <div style="text-align:center; padding:20px; color:#6B7CA8;">Загрузка...</div>
+    </div>
+  </div>
+</div>
 
 <div id="wallet" class="tab">
   <div class="deposit-box">
@@ -239,23 +303,20 @@ let playerData = {
 let gpuStates = [];
 let miningIntervals = [];
 
-// ========== НОВЫЕ КАРТЫ С ОБНОВЛЁННЫМИ НАЗВАНИЯМИ ==========
+// ========== КАРТЫ ==========
 const gpuTemplates = [
-  // GPU-майнер (первый, только GPU)
   { name: "Basic Miner", price: 1, priceCurrency: "gpu", tonReward: 0, gpuReward: 5, durationMs: 60000, image: "basicminer.png" },
-  
-  // Обычные майнеры (TON + GPU)
   { name: "Normal Miner", price: 2, priceCurrency: "ton", tonReward: 2.4, gpuReward: 4, durationMs: 120000, image: "normalminer.png" },
   { name: "Pro Miner", price: 3, priceCurrency: "ton", tonReward: 3.6, gpuReward: 6, durationMs: 180000, image: "prominer.png" },
   { name: "Ultra Miner", price: 5, priceCurrency: "ton", tonReward: 6, gpuReward: 10, durationMs: 300000, image: "ultraminer.png" },
   { name: "Legendary Miner", price: 50, priceCurrency: "ton", tonReward: 60, gpuReward: 200, durationMs: 600000, image: "legendaryminer.png" },
   { name: "X Miner", price: 100, priceCurrency: "ton", tonReward: 120, gpuReward: 500, durationMs: 1200000, image: "xminer.png" },
-  
-  // Реферальные майнеры
   { name: "Friend Miner", price: 0, priceCurrency: "ref", tonReward: 1, gpuReward: 5, durationMs: 60000, requiredActive: 10, requiredEarned: 100, tier: "basic", image: "friendminer.png" },
   { name: "Bro Miner", price: 0, priceCurrency: "ref", tonReward: 5, gpuReward: 25, durationMs: 120000, requiredActive: 50, requiredEarned: 100, tier: "ultra", image: "brominer.png" },
   { name: "Nexus Miner", price: 0, priceCurrency: "ref", tonReward: 20, gpuReward: 100, durationMs: 300000, requiredActive: 150, requiredEarned: 100, tier: "legendary", image: "nexusminer.png" }
 ];
+
+const EXCHANGE_RATE = 0.001;
 
 // ========== ОЧИСТКА ТАЙМЕРОВ ==========
 function clearAllMinings() {
@@ -300,7 +361,6 @@ function renderHistory() {
   }).join('');
 }
 
-// ========== ОСНОВНАЯ ФУНКЦИЯ ОТОБРАЖЕНИЯ ДРУЗЕЙ ==========
 function renderFriendsList() {
   const container = document.getElementById("friendsList");
   if (!container) return;
@@ -572,6 +632,125 @@ async function loadReferrals() {
   }
 }
 
+// ========== ЗАДАНИЯ ==========
+async function loadTasksGame() {
+  const container = document.getElementById("tasksListGame");
+  if (!container) return;
+  
+  const result = await apiRequest("tasks/list", {});
+  if (result?.success && result.tasks) {
+    if (result.tasks.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">📭 Нет активных заданий</div>';
+      return;
+    }
+    
+    container.innerHTML = result.tasks.map(task => `
+      <div class="card task-card">
+        <div class="card-info">
+          <h3>${task.title}</h3>
+          <div class="task-desc">${task.description}</div>
+          <div class="rewards-info task-rewards">
+            <span>💰 +${task.rewardTon} <img src="ton.png" style="width: 12px; height: 12px;"></span>
+            <span>⚡ +${task.rewardGpu} <img src="gpu.png" style="width: 12px; height: 12px;"></span>
+          </div>
+          ${!task.completed ? 
+            `<button class="claim-btn task-btn" onclick="completeTask('${task.id}')">✅ Выполнить</button>` : 
+            '<div class="task-completed">✅ Задание выполнено</div>'
+          }
+        </div>
+      </div>
+    `).join('');
+  } else {
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">📭 Нет активных заданий</div>';
+  }
+}
+
+async function completeTask(taskId) {
+  const result = await apiRequest("tasks/complete", { taskId });
+  if (result?.success) {
+    tg.showAlert("✅ Задание выполнено! Ожидайте подтверждения админа.");
+    await loadTasksGame();
+  } else {
+    tg.showAlert("❌ " + (result?.error || "Ошибка"));
+  }
+}
+
+// ========== ОБМЕН ВАЛЮТ ==========
+const sellInput = document.getElementById("sellGpuAmount");
+const buyInput = document.getElementById("buyGpuAmount");
+const sellEstimate = document.getElementById("sellEstimate");
+const buyEstimate = document.getElementById("buyEstimate");
+
+if (sellInput) {
+  sellInput.addEventListener("input", function() {
+    const amount = parseFloat(this.value) || 0;
+    const tonReceived = amount * EXCHANGE_RATE;
+    sellEstimate.innerHTML = `Вы получите: ${tonReceived.toFixed(4)} <img src="ton.png" style="width: 12px; height: 12px;">`;
+  });
+}
+
+if (buyInput) {
+  buyInput.addEventListener("input", function() {
+    const tonAmount = parseFloat(this.value) || 0;
+    const gpuReceived = tonAmount / EXCHANGE_RATE;
+    buyEstimate.innerHTML = `Вы получите: ${gpuReceived.toFixed(2)} <img src="gpu.png" style="width: 12px; height: 12px;">`;
+  });
+}
+
+const sellBtn = document.getElementById("sellGpuBtn");
+if (sellBtn) {
+  sellBtn.onclick = async () => {
+    const amount = parseFloat(sellInput.value);
+    if (isNaN(amount) || amount <= 0) {
+      tg.showAlert("❌ Введите корректное количество GPU");
+      return;
+    }
+    if (playerData.gpuTokens < amount) {
+      tg.showAlert("❌ Недостаточно GPU");
+      return;
+    }
+    
+    const tonReceived = amount * EXCHANGE_RATE;
+    
+    playerData.gpuTokens -= amount;
+    playerData.ton += tonReceived;
+    updateUI();
+    await saveGameState();
+    await refreshBalanceForAnyAction();
+    
+    sellInput.value = "";
+    sellEstimate.innerHTML = "Вы получите: 0 TON";
+    tg.showAlert(`✅ Вы обменяли ${amount} GPU на ${tonReceived.toFixed(4)} TON`);
+  };
+}
+
+const buyBtn = document.getElementById("buyGpuBtn");
+if (buyBtn) {
+  buyBtn.onclick = async () => {
+    const tonAmount = parseFloat(buyInput.value);
+    if (isNaN(tonAmount) || tonAmount <= 0) {
+      tg.showAlert("❌ Введите корректное количество TON");
+      return;
+    }
+    if (playerData.ton < tonAmount) {
+      tg.showAlert("❌ Недостаточно TON");
+      return;
+    }
+    
+    const gpuReceived = tonAmount / EXCHANGE_RATE;
+    
+    playerData.ton -= tonAmount;
+    playerData.gpuTokens += gpuReceived;
+    updateUI();
+    await saveGameState();
+    await refreshBalanceForAnyAction();
+    
+    buyInput.value = "";
+    buyEstimate.innerHTML = "Вы получите: 0 GPU";
+    tg.showAlert(`✅ Вы обменяли ${tonAmount} TON на ${gpuReceived.toFixed(2)} GPU`);
+  };
+}
+
 async function createDeposit(amount) {
   await refreshBalanceForAnyAction();
   const result = await apiRequest("createDeposit", { amount });
@@ -804,6 +983,9 @@ window.openTab = async function(id, btn) {
     }
     if (id === "wallet") {
         renderHistory();
+    }
+    if (id === "tasks") {
+        await loadTasksGame();
     }
 };
 
