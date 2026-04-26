@@ -112,7 +112,7 @@ async function requireAuth(req, res, next) {
 
 // ========== API для игры ==========
 app.post('/api/tg', async (req, res) => {
-  const { action, user_id, name, referrer_id, amount, ton, gpu, friends, ton_earned, state, tonWallet, earnedGpu, taskId } = req.body;
+  const { action, user_id, name, referrer_id, amount, ton, gpu, friends, ton_earned, state, tonWallet, taskId } = req.body;
   
   try {
     const bannedUser = await User.findOne({ userId: user_id, isBanned: true });
@@ -226,19 +226,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, message: 'Withdraw request created', pendingCount: pendingCount + 1 });
     }
     
-    // ОБНОВЛЕНИЕ СТАТИСТИКИ РЕФЕРАЛА
-    if (action === 'updateFriendEarned') {
-      const referrer = await User.findOne({ "invitedFriends.friendId": user_id });
-      if (referrer) {
-        const friend = referrer.invitedFriends.find(f => f.friendId === user_id);
-        if (friend) {
-          friend.earnedGpu = (friend.earnedGpu || 0) + earnedGpu;
-          await referrer.save();
-          console.log(`📊 Реферер ${referrer.userId}: друг ${user_id} заработал +${earnedGpu} GPU (всего ${friend.earnedGpu})`);
-        }
-      }
-      return res.json({ success: true });
-    }
+    // ========== ЭНДПОЙНТ updateFriendEarned УДАЛЁН (безопасность) ==========
     
     // ========== ЗАДАНИЯ ==========
     if (action === 'tasks/list') {
@@ -611,7 +599,7 @@ app.post('/admin/reject', requireAuth, async (req, res) => {
 app.get('/admin/logout', (req, res) => { req.session.destroy(); res.redirect('/admin/login'); });
 app.get('/', (req, res) => { res.json({ status: 'OK', message: 'CryptoGPU Backend is running' }); });
 
-// ========== API ДЛЯ БОТА ==========
+// ========== API ДЛЯ БОТА (засчёт реферала) ==========
 app.post('/api/bot/registerRef', async (req, res) => {
   const { userId, referrerId, name } = req.body;
   
