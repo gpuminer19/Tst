@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Admin Panel | CryptoGPU</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0B0E1A; color: #fff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 16px 12px 80px; }
+  .header { background: linear-gradient(135deg, #1A2A5E, #0F1A3A); border-radius: 24px; padding: 16px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 1.4rem; display: flex; align-items: center; gap: 8px; }
+  .logout-btn { background: #DC2626; border: none; padding: 8px 16px; border-radius: 40px; color: white; font-weight: bold; cursor: pointer; }
+  .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+  .stat-card { background: rgba(26, 31, 53, 0.9); border-radius: 20px; padding: 12px; text-align: center; }
+  .stat-value { font-size: 24px; font-weight: bold; color: #00D4FF; }
+  .stat-label { font-size: 11px; color: #8EA3D4; margin-top: 4px; }
+  .tabs { display: flex; gap: 4px; background: #0B0E1A; padding: 8px 0; overflow-x: auto; margin-bottom: 16px; }
+  .tab-btn { background: #1A1F35; border: none; padding: 10px 16px; border-radius: 40px; color: #8EA3D4; font-size: 13px; white-space: nowrap; cursor: pointer; }
+  .tab-btn.active { background: #00D4FF; color: #0B0E1A; font-weight: bold; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .search-box { width: 100%; background: #1A1F35; border: 1px solid #00D4FF; border-radius: 40px; padding: 12px 16px; color: #fff; margin-bottom: 16px; font-size: 14px; }
+  .user-card, .request-card, .task-card { background: #1A1F35; border-radius: 20px; padding: 14px; margin-bottom: 12px; }
+  .user-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
+  .user-name { font-weight: bold; font-size: 16px; }
+  .user-id { font-size: 10px; color: #8EA3D4; font-family: monospace; }
+  .user-stats { font-size: 12px; color: #A0B4E0; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .button-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .btn { background: #1A2A5E; border: none; padding: 8px 14px; border-radius: 40px; color: white; font-size: 12px; cursor: pointer; }
+  .btn-success { background: #00A86B; }
+  .btn-danger { background: #DC2626; }
+  .btn-warning { background: #FF8C00; }
+  .btn-info { background: #00D4FF; color: #0B0E1A; }
+  .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; z-index: 1000; }
+  .modal-content { background: #1A1F35; border-radius: 28px; padding: 24px; width: 90%; max-width: 400px; }
+  .modal-content input, .modal-content select, .modal-content textarea { width: 100%; background: #0B0E1A; border: 1px solid #00D4FF; border-radius: 16px; padding: 12px; margin: 8px 0; color: #fff; }
+  .modal-content button { margin-top: 12px; width: 100%; }
+  .badge { background: #00A86B; padding: 4px 10px; border-radius: 20px; font-size: 10px; }
+  .badge-banned { background: #DC2626; }
+  .miners-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .miner-tag { background: #00D4FF20; padding: 4px 8px; border-radius: 20px; font-size: 11px; }
+  .pending-count { background: #FF8C00; border-radius: 20px; padding: 2px 8px; font-size: 11px; margin-left: 8px; }
+  .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #0B0E1A; padding: 10px; text-align: center; font-size: 10px; color: #5A6A8A; }
+</style>
+</head>
+<body>
+
+<div id="loginPanel" style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+  <div style="background: #1A1F35; border-radius: 28px; padding: 32px; width: 100%; max-width: 300px;">
+    <h2 style="text-align: center; margin-bottom: 20px;">🔐 Admin Login</h2>
+    <input type="text" id="loginUsername" placeholder="Username" style="width: 100%; background: #0B0E1A; border: 1px solid #00D4FF; border-radius: 16px; padding: 12px; margin-bottom: 12px; color: #fff;">
+    <input type="password" id="loginPassword" placeholder="Password" style="width: 100%; background: #0B0E1A; border: 1px solid #00D4FF; border-radius: 16px; padding: 12px; margin-bottom: 20px; color: #fff;">
+    <button onclick="adminLogin()" style="width: 100%; background: #00D4FF; border: none; padding: 12px; border-radius: 40px; font-weight: bold;">Войти</button>
+    <div id="loginError" style="color: #DC2626; text-align: center; margin-top: 12px;"></div>
+  </div>
+</div>
+
+<div id="adminPanel" style="display: none;">
+  <div class="header">
+    <h1><i class="fa-solid fa-shield"></i> CryptoGPU Admin</h1>
+    <button class="logout-btn" onclick="adminLogout()">Выйти</button>
+  </div>
+
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card"><div class="stat-value" id="totalUsers">0</div><div class="stat-label">Пользователей</div></div>
+    <div class="stat-card"><div class="stat-value" id="totalTon">0</div><div class="stat-label">Всего TON</div></div>
+    <div class="stat-card"><div class="stat-value" id="pendingDeposits">0</div><div class="stat-label">⬇️ Пополнений</div></div>
+    <div class="stat-card"><div class="stat-value" id="pendingWithdraws">0</div><div class="stat-label">⬆️ Выводов</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('users')">👥 Пользователи</button>
+    <button class="tab-btn" onclick="showTab('deposits')">💎 Пополнения</button>
+    <button class="tab-btn" onclick="showTab('withdraws')">📤 Выводы</button>
+    <button class="tab-btn" onclick="showTab('tasks')">📋 Задания</button>
+    <button class="tab-btn" onclick="showTab('pendingTasks')">⏳ Ждут проверки</button>
+  </div>
+
+  <div id="tab-users" class="tab-content active">
+    <input type="text" class="search-box" id="searchUsers" placeholder="🔍 Поиск по ID или имени..." onkeyup="searchUsers()">
+    <div id="usersList"></div>
+  </div>
+
+  <div id="tab-deposits" class="tab-content"><div id="depositsList"></div></div>
+  <div id="tab-withdraws" class="tab-content"><div id="withdrawsList"></div></div>
+  <div id="tab-tasks" class="tab-content">
+    <button class="btn btn-success" onclick="openTaskModal()" style="margin-bottom: 12px;">➕ Добавить задание</button>
+    <div id="tasksList"></div>
+  </div>
+  <div id="tab-pendingTasks" class="tab-content"><div id="pendingTasksList"></div></div>
+
+  <div class="footer">CryptoGPU Admin Panel v2.0</div>
+</div>
+
+<!-- Модальное окно для заданий -->
+<div id="taskModal" class="modal">
+  <div class="modal-content">
+    <h3 id="taskModalTitle">Добавить задание</h3>
+    <input type="hidden" id="taskId">
+    <input type="text" id="taskTitle" placeholder="Название">
+    <textarea id="taskDescription" placeholder="Описание" rows="2"></textarea>
+    <input type="number" id="taskRewardTon" placeholder="Награда TON" step="0.1">
+    <input type="number" id="taskRewardGpu" placeholder="Награда GPU">
+    <input type="text" id="taskTaskUrl" placeholder="Ссылка (если есть)">
+    <select id="taskIsDaily">
+      <option value="true">Ежедневное</option>
+      <option value="false">Одноразовое</option>
+    </select>
+    <input type="number" id="taskOrder" placeholder="Порядок">
+    <button class="btn btn-success" onclick="saveTask()">💾 Сохранить</button>
+    <button class="btn btn-danger" onclick="closeTaskModal()">Отмена</button>
+  </div>
+</div>
+
+<!-- Модальное окно для редактирования пользователя -->
+<div id="userModal" class="modal">
+  <div class="modal-content">
+    <h3>✏️ Редактирование</h3>
+    <input type="hidden" id="editUserId">
+    <input type="text" id="editUserIdShow" readonly style="background:#2A2F4A;">
+    <input type="number" id="editTon" placeholder="TON баланс" step="0.01">
+    <input type="number" id="editGpu" placeholder="GPU баланс">
+    <button class="btn btn-success" onclick="saveUserEdit()">💾 Сохранить</button>
+    <button class="btn btn-danger" onclick="closeUserModal()">Отмена</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script>
+const API_URL = window.location.origin;
+
+async function adminLogin() {
+  const username = document.getElementById('loginUsername').value;
+  const password = document.getElementById('loginPassword').value;
+  const res = await fetch(`${API_URL}/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (data.success) {
+    document.getElementById('loginPanel').style.display = 'none';
+    document.getElementById('adminPanel').style.display = 'block';
+    loadAll();
+  } else {
+    document.getElementById('loginError').innerText = 'Неверный логин или пароль';
+  }
+}
+
+async function adminLogout() {
+  await fetch(`${API_URL}/admin/logout`, { method: 'POST' });
+  location.reload();
+}
+
+function showTab(tabName) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${tabName}`).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (tabName === 'users') loadUsers();
+  if (tabName === 'deposits') loadDeposits();
+  if (tabName === 'withdraws') loadWithdraws();
+  if (tabName === 'tasks') loadTasks();
+  if (tabName === 'pendingTasks') loadPendingTasks();
+}
+
+async function loadAll() {
+  loadUsers();
+  loadDeposits();
+  loadWithdraws();
+  loadTasks();
+  loadPendingTasks();
+  loadStats();
+}
+
+async function loadStats() {
+  const users = await fetch(`${API_URL}/admin/api/users`).then(r => r.json());
+  document.getElementById('totalUsers').innerText = users.length;
+  const totalTon = users.reduce((s, u) => s + (u.ton || 0), 0).toFixed(2);
+  document.getElementById('totalTon').innerText = totalTon;
+  const deposits = await fetch(`${API_URL}/admin/api/deposits/pending`).then(r => r.json());
+  const withdraws = await fetch(`${API_URL}/admin/api/withdraws/pending`).then(r => r.json());
+  document.getElementById('pendingDeposits').innerText = deposits.length;
+  document.getElementById('pendingWithdraws').innerText = withdraws.length;
+}
+
+async function loadUsers() {
+  const res = await fetch(`${API_URL}/admin/api/users`);
+  const users = await res.json();
+  const container = document.getElementById('usersList');
+  container.innerHTML = users.map(u => `
+    <div class="user-card" data-id="${u.userId}" data-name="${u.name.toLowerCase()}">
+      <div class="user-header">
+        <span class="user-name">${escapeHtml(u.name)} ${u.isBanned ? '<span class="badge badge-banned">🚫 Забанен</span>' : ''}</span>
+        <span class="user-id">${u.userId}</span>
+      </div>
+      <div class="user-stats">
+        <span>💰 ${(u.ton || 0).toFixed(4)} TON</span>
+        <span>⚡ ${(u.gpu || 0).toFixed(2)} GPU</span>
+        <span>👥 ${u.friends || 0} рефералов</span>
+        <span>📅 ${formatDate(u.lastSeen || u.createdAt)}</span>
+      </div>
+      <div class="miners-list">
+        ${Object.entries(u.minerQuantities || {}).filter(([_,q]) => q > 0).map(([id,q]) => `<span class="miner-tag">${id} ×${q}</span>`).join('') || '<span class="miner-tag">нет майнеров</span>'}
+      </div>
+      <div class="button-group">
+        <button class="btn btn-info" onclick="editUser('${u.userId}', ${u.ton || 0}, ${u.gpu || 0})">✏️ Редактировать</button>
+        <button class="btn btn-success" onclick="giveGpu('${u.userId}')">⚡ +GPU</button>
+        <button class="btn btn-success" onclick="giveTon('${u.userId}')">💰 +TON</button>
+        <button class="btn btn-warning" onclick="giveMiner('${u.userId}')">⛏️ +Майнер</button>
+        ${u.isBanned ? `<button class="btn btn-success" onclick="unbanUser('${u.userId}')">🔓 Разбанить</button>` : `<button class="btn btn-danger" onclick="banUser('${u.userId}')">🔒 Забанить</button>`}
+      </div>
+    </div>
+  `).join('');
+}
+
+function searchUsers() {
+  const query = document.getElementById('searchUsers').value.toLowerCase();
+  document.querySelectorAll('.user-card').forEach(card => {
+    const id = card.dataset.id?.toLowerCase() || '';
+    const name = card.dataset.name?.toLowerCase() || '';
+    card.style.display = (id.includes(query) || name.includes(query)) ? 'block' : 'none';
+  });
+}
+
+function formatDate(d) { return new Date(d).toLocaleString(); }
+function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'; }); }
+
+function editUser(userId, ton, gpu) {
+  document.getElementById('editUserId').value = userId;
+  document.getElementById('editUserIdShow').value = userId;
+  document.getElementById('editTon').value = ton;
+  document.getElementById('editGpu').value = gpu;
+  document.getElementById('userModal').style.display = 'flex';
+}
+function closeUserModal() { document.getElementById('userModal').style.display = 'none'; }
+async function saveUserEdit() {
+  const userId = document.getElementById('editUserId').value;
+  const ton = parseFloat(document.getElementById('editTon').value) || 0;
+  const gpu = parseFloat(document.getElementById('editGpu').value) || 0;
+  await fetch(`${API_URL}/admin/api/user/setBalance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, ton, gpu }) });
+  closeUserModal();
+  loadUsers();
+}
+
+async function giveGpu(userId) {
+  const amount = prompt('Количество GPU для выдачи:');
+  if (!amount) return;
+  await fetch(`${API_URL}/admin/api/user/giveGpu`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, amount: parseFloat(amount) }) });
+  loadUsers();
+}
+async function giveTon(userId) {
+  const amount = prompt('Количество TON для выдачи:');
+  if (!amount) return;
+  await fetch(`${API_URL}/admin/api/user/giveTon`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, amount: parseFloat(amount) }) });
+  loadUsers();
+}
+async function giveMiner(userId) {
+  const minerId = prompt('ID майнера (basic, normal, pro, ultra, legendary, minex, friend, bro, nexus):');
+  if (!minerId) return;
+  const quantity = parseInt(prompt('Количество:')) || 1;
+  await fetch(`${API_URL}/admin/api/user/giveMiner`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, minerId, quantity }) });
+  loadUsers();
+}
+async function banUser(userId) {
+  const reason = prompt('Причина бана:');
+  await fetch(`${API_URL}/admin/api/user/ban`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, reason }) });
+  loadUsers();
+}
+async function unbanUser(userId) {
+  await fetch(`${API_URL}/admin/api/user/unban`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) });
+  loadUsers();
+}
+
+async function loadDeposits() {
+  const deposits = await fetch(`${API_URL}/admin/api/deposits/pending`).then(r => r.json());
+  document.getElementById('depositsList').innerHTML = deposits.map(d => `
+    <div class="request-card">
+      <div><strong>${escapeHtml(d.userName)}</strong> (${d.userId})</div>
+      <div style="font-size: 20px; margin: 8px 0;">${d.amount} TON</div>
+      <div class="button-group">
+        <button class="btn btn-success" onclick="approveDeposit('${d._id}')">✅ Подтвердить</button>
+        <button class="btn btn-danger" onclick="rejectDeposit('${d._id}')">❌ Отклонить</button>
+      </div>
+    </div>
+  `).join('') || '<div style="text-align:center; padding:20px; color:#6B7CA8;">Нет заявок</div>';
+}
+async function loadWithdraws() {
+  const withdraws = await fetch(`${API_URL}/admin/api/withdraws/pending`).then(r => r.json());
+  document.getElementById('withdrawsList').innerHTML = withdraws.map(w => `
+    <div class="request-card">
+      <div><strong>${escapeHtml(w.userName)}</strong> (${w.userId})</div>
+      <div style="font-size: 20px; margin: 8px 0;">${w.amount} TON</div>
+      <div style="font-size: 11px; word-break: break-all;">📤 ${w.wallet}</div>
+      <div class="button-group">
+        <button class="btn btn-success" onclick="approveWithdraw('${w._id}')">✅ Выполнен</button>
+        <button class="btn btn-danger" onclick="rejectWithdraw('${w._id}')">❌ Отклонить</button>
+      </div>
+    </div>
+  `).join('') || '<div style="text-align:center; padding:20px; color:#6B7CA8;">Нет заявок</div>';
+}
+
+async function approveDeposit(id) { await fetch(`${API_URL}/admin/api/deposit/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); loadDeposits(); loadStats(); loadUsers(); }
+async function approveWithdraw(id) { await fetch(`${API_URL}/admin/api/withdraw/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); loadWithdraws(); loadStats(); }
+async function rejectWithdraw(id) { await fetch(`${API_URL}/admin/api/withdraw/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); loadWithdraws(); loadStats(); }
+function rejectDeposit(id) { alert('Пополнения нельзя отклонить, только подтвердить'); }
+
+// ЗАДАНИЯ
+async function loadTasks() {
+  const tasks = await fetch(`${API_URL}/admin/api/tasks`).then(r => r.json());
+  document.getElementById('tasksList').innerHTML = tasks.map(t => `
+    <div class="task-card">
+      <div><strong>${escapeHtml(t.title)}</strong> - ${escapeHtml(t.description)}</div>
+      <div style="font-size: 12px; margin: 6px 0;">💰 +${t.rewardTon} TON | ⚡ +${t.rewardGpu} GPU | ${t.isDaily ? '📅 Ежедневное' : '🔁 Одноразовое'}</div>
+      <div class="button-group">
+        <button class="btn btn-warning" onclick="editTask('${t.id}')">✏️ Редактировать</button>
+        <button class="btn btn-danger" onclick="deleteTask('${t.id}')">🗑️ Удалить</button>
+      </div>
+    </div>
+  `).join('') || '<div style="text-align:center; padding:20px; color:#6B7CA8;">Нет заданий</div>';
+}
+async function loadPendingTasks() {
+  const pending = await fetch(`${API_URL}/admin/api/tasks/pending`).then(r => r.json());
+  document.getElementById('pendingTasksList').innerHTML = pending.map(p => `
+    <div class="request-card">
+      <div><strong>${escapeHtml(p.userName)}</strong> (${p.userId})</div>
+      <div>📋 ${escapeHtml(p.taskTitle)}</div>
+      <div style="font-size: 12px; margin: 6px 0;">💰 +${p.rewardTon} TON | ⚡ +${p.rewardGpu} GPU</div>
+      <button class="btn btn-success" onclick="approveTask('${p.id}')">✅ Подтвердить</button>
+    </div>
+  `).join('') || '<div style="text-align:center; padding:20px; color:#6B7CA8;">Нет заданий на проверку</div>';
+}
+async function approveTask(id) { await fetch(`${API_URL}/admin/api/tasks/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); loadPendingTasks(); loadStats(); }
+
+function openTaskModal() {
+  document.getElementById('taskModalTitle').innerText = 'Добавить задание';
+  document.getElementById('taskId').value = '';
+  document.getElementById('taskTitle').value = '';
+  document.getElementById('taskDescription').value = '';
+  document.getElementById('taskRewardTon').value = '';
+  document.getElementById('taskRewardGpu').value = '';
+  document.getElementById('taskTaskUrl').value = '';
+  document.getElementById('taskIsDaily').value = 'true';
+  document.getElementById('taskOrder').value = '';
+  document.getElementById('taskModal').style.display = 'flex';
+}
+function closeTaskModal() { document.getElementById('taskModal').style.display = 'none'; }
+function editTask(id) { loadTaskForEdit(id); }
+async function loadTaskForEdit(id) {
+  const tasks = await fetch(`${API_URL}/admin/api/tasks`).then(r => r.json());
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+  document.getElementById('taskModalTitle').innerText = 'Редактировать задание';
+  document.getElementById('taskId').value = task.id;
+  document.getElementById('taskTitle').value = task.title;
+  document.getElementById('taskDescription').value = task.description;
+  document.getElementById('taskRewardTon').value = task.rewardTon;
+  document.getElementById('taskRewardGpu').value = task.rewardGpu;
+  document.getElementById('taskTaskUrl').value = task.taskUrl || '';
+  document.getElementById('taskIsDaily').value = task.isDaily ? 'true' : 'false';
+  document.getElementById('taskOrder').value = task.order || 0;
+  document.getElementById('taskModal').style.display = 'flex';
+}
+async function saveTask() {
+  const task = {
+    id: document.getElementById('taskId').value,
+    title: document.getElementById('taskTitle').value,
+    description: document.getElementById('taskDescription').value,
+    rewardTon: parseFloat(document.getElementById('taskRewardTon').value) || 0,
+    rewardGpu: parseInt(document.getElementById('taskRewardGpu').value) || 0,
+    taskUrl: document.getElementById('taskTaskUrl').value,
+    isDaily: document.getElementById('taskIsDaily').value === 'true',
+    order: parseInt(document.getElementById('taskOrder').value) || 0
+  };
+  await fetch(`${API_URL}/admin/api/tasks/save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(task) });
+  closeTaskModal();
+  loadTasks();
+}
+async function deleteTask(id) {
+  if (!confirm('Удалить задание?')) return;
+  await fetch(`${API_URL}/admin/api/tasks/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+  loadTasks();
+}
+
+setInterval(() => { if (document.getElementById('adminPanel').style.display !== 'none') loadStats(); }, 30000);
+</script>
+</body>
+</html>
