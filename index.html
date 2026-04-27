@@ -535,7 +535,7 @@ async function buyMiner(minerId) {
     ton: playerData.ton, 
     gpu: playerData.gpuTokens, 
     friends: playerData.friends, 
-    state: { minerQuantities: minerQuantities, accumulatedTon: 0, accumulatedGpu: 0 } 
+    state: { minerQuantities: minerQuantities, accumulatedTon: accumulatedTon, accumulatedGpu: accumulatedGpu } 
   });
   
   const limitText = miner.maxQuantity ? ` (${minerQuantities[miner.id]}/${miner.maxQuantity})` : '';
@@ -639,11 +639,10 @@ async function loadUserData(referrerId = null) {
     initMinerQuantities();
     
     // ЗАГРУЖАЕМ НАКОПЛЕНИЯ С СЕРВЕРА!
-    const serverAccumulatedTon = result.data.gameState?.accumulatedTon || 0;
-    const serverAccumulatedGpu = result.data.gameState?.accumulatedGpu || 0;
+    accumulatedTon = result.data.accumulatedTon || 0;
+    accumulatedGpu = result.data.accumulatedGpu || 0;
     
-    accumulatedTon = serverAccumulatedTon;
-    accumulatedGpu = serverAccumulatedGpu;
+    console.log(`📦 Загружены накопления с сервера: TON=${accumulatedTon}, GPU=${accumulatedGpu}`);
     
     document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
     document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
