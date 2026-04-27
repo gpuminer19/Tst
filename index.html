@@ -333,13 +333,10 @@ let playerData = {
 
 let minerQuantities = {};
 
-// НАКОПЛЕНИЯ (ждут сбора) - ТОЛЬКО КЛИЕНТ
+// НАКОПЛЕНИЯ (ждут сбора)
 let accumulatedTon = 0;
 let accumulatedGpu = 0;
 let lastMiningTimestamp = Date.now();
-
-// Серверная синхронизация - ОБНОВЛЯЕТ ТОЛЬКО ОСНОВНОЙ БАЛАНС
-let serverSyncInterval = null;
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 function initMinerQuantities() {
@@ -430,7 +427,7 @@ function updateMiningRateDisplay() {
   document.getElementById("miningRateGpu").innerHTML = `+${totalGpuPerDay.toFixed(2)} GPU/день`;
 }
 
-// ========== КЛИЕНТСКИЙ МАЙНИНГ (каждую секунду, только накопления) ==========
+// ========== КЛИЕНТСКИЙ МАЙНИНГ (каждую секунду) ==========
 function startClientMining() {
   setInterval(() => {
     const now = Date.now();
@@ -458,27 +455,6 @@ function startClientMining() {
   }, 1000);
 }
 
-// ========== СЕРВЕРНАЯ СИНХРОНИЗАЦИЯ (только получение данных, без изменения накоплений) ==========
-async function syncWithServer() {
-  const result = await apiRequest("register", {});
-  if (result?.success && result.data) {
-    // Обновляем только основной баланс
-    playerData.ton = result.data.ton;
-    playerData.gpuTokens = result.data.gpu;
-    playerData.transactions = result.data.transactions || [];
-    
-    // Обновляем количество майнеров (на случай если покупали в другом месте)
-    if (result.data.gameState?.minerQuantities) {
-      minerQuantities = result.data.gameState.minerQuantities;
-      renderAllCards();
-      updateMiningRateDisplay();
-    }
-    
-    updateUI();
-    renderHistory();
-  }
-}
-
 // ========== СБОР НАКОПЛЕННОГО ==========
 async function claimAccumulatedReward() {
   if (accumulatedTon === 0 && accumulatedGpu === 0) {
@@ -493,7 +469,7 @@ async function claimAccumulatedReward() {
     ton: newTon, 
     gpu: newGpu, 
     friends: playerData.friends, 
-    state: { minerQuantities: minerQuantities } 
+    state: { minerQuantities: minerQuantities, accumulatedTon: 0, accumulatedGpu: 0 } 
   });
   
   if (saveResult?.success) {
@@ -559,7 +535,7 @@ async function buyMiner(minerId) {
     ton: playerData.ton, 
     gpu: playerData.gpuTokens, 
     friends: playerData.friends, 
-    state: { minerQuantities: minerQuantities } 
+    state: { minerQuantities: minerQuantities, accumulatedTon: 0, accumulatedGpu: 0 } 
   });
   
   const limitText = miner.maxQuantity ? ` (${minerQuantities[miner.id]}/${miner.maxQuantity})` : '';
@@ -662,17 +638,22 @@ async function loadUserData(referrerId = null) {
     }
     initMinerQuantities();
     
+    // ЗАГРУЖАЕМ НАКОПЛЕНИЯ С СЕРВЕРА!
+    const serverAccumulatedTon = result.data.gameState?.accumulatedTon || 0;
+    const serverAccumulatedGpu = result.data.gameState?.accumulatedGpu || 0;
+    
+    accumulatedTon = serverAccumulatedTon;
+    accumulatedGpu = serverAccumulatedGpu;
+    
+    document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
+    document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
+    
     updateUI();
     renderFriendsList();
     renderHistory();
     renderAllCards();
     updateMiningRateDisplay();
     
-    // Сбрасываем накопления
-    accumulatedTon = 0;
-    accumulatedGpu = 0;
-    document.getElementById("accumulatedTon").innerText = "0.000000";
-    document.getElementById("accumulatedGpu").innerText = "0.0000";
     lastMiningTimestamp = Date.now();
     
     return true;
@@ -706,7 +687,6 @@ async function createWithdraw(amount, wallet) {
   if (result?.success) {
     document.getElementById("withdrawAmount").value = "";
     document.getElementById("withdrawWallet").value = "";
-    await syncWithServer();
     tg.showAlert("Заявка на вывод создана! Ожидайте подтверждения.");
     return true;
   }
@@ -744,7 +724,6 @@ async function loadTasksGame() {
 async function completeTask(taskId) {
   await apiRequest("tasks/complete", { taskId });
   await loadTasksGame();
-  await syncWithServer();
 }
 
 // ========== ПРОДАЖА GPU ==========
@@ -772,7 +751,7 @@ function initExchange() {
       ton: playerData.ton, 
       gpu: playerData.gpuTokens, 
       friends: playerData.friends, 
-      state: { minerQuantities: minerQuantities } 
+      state: { minerQuantities: minerQuantities, accumulatedTon: accumulatedTon, accumulatedGpu: accumulatedGpu } 
     });
     
     document.getElementById("sellGpuAmount").value = "";
@@ -782,7 +761,6 @@ function initExchange() {
 
 // ========== НАВИГАЦИЯ ==========
 window.openTab = async function(id, btn) {
-  await syncWithServer();
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
@@ -822,13 +800,9 @@ async function init() {
   await loadReferrals();
   initExchange();
   
-  // Запускаем клиентский майнинг (каждую секунду) - только накопления
+  // Запускаем клиентский майнинг (каждую секунду)
   lastMiningTimestamp = Date.now();
   startClientMining();
-  
-  // Запускаем серверную синхронизацию (раз в 30 секунд) - только основной баланс
-  if (serverSyncInterval) clearInterval(serverSyncInterval);
-  serverSyncInterval = setInterval(syncWithServer, 30000);
   
   document.getElementById("claimAllBtn").onclick = claimAccumulatedReward;
   
@@ -847,7 +821,6 @@ async function init() {
     document.getElementById("depositConfirm").style.display = "none";
     document.getElementById("depositForm").style.display = "block";
     document.getElementById("depositAmount").value = "";
-    await syncWithServer();
     tg.showAlert("Спасибо! Ожидайте зачисления в ближайшее время.");
   };
   document.getElementById("cancelPayBtn").onclick = () => {
