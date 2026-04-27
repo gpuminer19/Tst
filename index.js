@@ -296,19 +296,14 @@ app.post('/api/tg', async (req, res) => {
 });
 
 // ========== АДМИН-ПАНЕЛЬ ==========
-app.post('/admin/login', async (req, res) => {
-  const { username, password } = req.body;
-  const bcrypt = require('bcrypt');
-  const admin = await Admin.findOne({ username });
-  if (admin && await bcrypt.compare(password, admin.passwordHash)) {
-    req.session.adminId = admin._id;
-    return res.json({ success: true });
-  }
-  res.json({ success: false });
+app.post('/admin/login', (req, res) => {
+  // ВРЕМЕННО - пропускаем любой логин/пароль
+  return res.json({ success: true });
 });
 
 app.get('/admin/check', (req, res) => {
-  res.json({ loggedIn: !!req.session.adminId });
+  // ВРЕМЕННО - всегда залогинен
+  res.json({ loggedIn: true });
 });
 
 app.post('/admin/logout', (req, res) => {
