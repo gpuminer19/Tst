@@ -332,8 +332,6 @@ let playerData = {
 };
 
 let minerQuantities = {};
-
-// НАКОПЛЕНИЯ (ждут сбора)
 let accumulatedTon = 0;
 let accumulatedGpu = 0;
 let lastMiningTimestamp = Date.now();
@@ -409,7 +407,6 @@ function updateRefLink() {
   document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`;
 }
 
-// ========== РАСЧЁТ СКОРОСТИ МАЙНИНГА ==========
 function getTotalMiningRates() {
   let totalTonPerDay = 0;
   let totalGpuPerDay = 0;
@@ -427,7 +424,6 @@ function updateMiningRateDisplay() {
   document.getElementById("miningRateGpu").innerHTML = `+${totalGpuPerDay.toFixed(2)} GPU/день`;
 }
 
-// ========== КЛИЕНТСКИЙ МАЙНИНГ (каждую секунду) ==========
 function startClientMining() {
   setInterval(() => {
     const now = Date.now();
@@ -446,7 +442,6 @@ function startClientMining() {
     if (earnedTon > 0 || earnedGpu > 0) {
       accumulatedTon += earnedTon;
       accumulatedGpu += earnedGpu;
-      
       document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
       document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
     }
@@ -455,33 +450,42 @@ function startClientMining() {
   }, 1000);
 }
 
+// ========== СИНХРОНИЗАЦИЯ С СЕРВЕРОМ ==========
+async function syncWithServer() {
+  const result = await apiRequest("register", {});
+  if (result?.success && result.data) {
+    playerData.ton = result.data.ton;
+    playerData.gpuTokens = result.data.gpu;
+    playerData.friends = result.data.friends;
+    playerData.invitedFriends = result.data.invitedFriends || [];
+    
+    accumulatedTon = result.data.accumulatedTon || 0;
+    accumulatedGpu = result.data.accumulatedGpu || 0;
+    document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
+    document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
+    
+    if (result.data.minerQuantities) {
+      minerQuantities = result.data.minerQuantities;
+      renderAllCards();
+      updateMiningRateDisplay();
+    }
+    
+    updateUI();
+    console.log(`🔄 Синхронизация: TON=${playerData.ton}, накопления=${accumulatedTon}`);
+    return true;
+  }
+  return false;
+}
+
 // ========== СБОР НАКОПЛЕННОГО ==========
 async function claimAccumulatedReward() {
-  // 1. Сначала получаем актуальные накопления с сервера
-  const syncResult = await apiRequest("register", {});
+  await syncWithServer();
   
-  if (!syncResult?.success) {
-    tg.showAlert("❌ Ошибка синхронизации. Попробуйте ещё раз.");
-    return;
-  }
-  
-  // 2. Берём РЕАЛЬНЫЕ накопления с сервера
-  const realAccumulatedTon = syncResult.data.accumulatedTon || 0;
-  const realAccumulatedGpu = syncResult.data.accumulatedGpu || 0;
-  
-  // 3. Обновляем локальные переменные
-  accumulatedTon = realAccumulatedTon;
-  accumulatedGpu = realAccumulatedGpu;
-  document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
-  document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
-  
-  // 4. Проверяем, есть ли что собирать
   if (accumulatedTon === 0 && accumulatedGpu === 0) {
     tg.showAlert("Накоплений пока нет! Купите майнеры и подождите.");
     return;
   }
   
-  // 5. Отправляем запрос на сохранение (обнуляем накопления)
   const newTon = playerData.ton + accumulatedTon;
   const newGpu = playerData.gpuTokens + accumulatedGpu;
   
@@ -495,23 +499,17 @@ async function claimAccumulatedReward() {
   });
   
   if (saveResult?.success) {
-    playerData.ton = newTon;
-    playerData.gpuTokens = newGpu;
-    
-    accumulatedTon = 0;
-    accumulatedGpu = 0;
-    
-    document.getElementById("accumulatedTon").innerText = "0.000000";
-    document.getElementById("accumulatedGpu").innerText = "0.0000";
-    updateUI();
-    
+    await syncWithServer();
     tg.showAlert(`🎉 Вы собрали награду!`);
   } else {
-    tg.showAlert("❌ Ошибка при сборе награды. Попробуйте ещё раз.");
+    tg.showAlert("❌ Ошибка при сборе награды");
   }
 }
+
 // ========== ПОКУПКА МАЙНЕРОВ ==========
 async function buyMiner(minerId) {
+  await syncWithServer();
+  
   const miner = gpuTemplates.find(m => m.id === minerId);
   if (!miner) return;
   
@@ -552,8 +550,7 @@ async function buyMiner(minerId) {
   renderMinerCard(miner.id);
   updateMiningRateDisplay();
   
-  // ✅ ПРАВИЛЬНЫЙ ФОРМАТ БЕЗ state
-  await apiRequest("save", { 
+  const saveResult = await apiRequest("save", { 
     ton: playerData.ton, 
     gpu: playerData.gpuTokens, 
     friends: playerData.friends,
@@ -562,8 +559,13 @@ async function buyMiner(minerId) {
     minerQuantities: minerQuantities 
   });
   
-  const limitText = miner.maxQuantity ? ` (${minerQuantities[miner.id]}/${miner.maxQuantity})` : '';
-  tg.showAlert(`✅ Вы купили ${miner.name}! Теперь у вас ${minerQuantities[miner.id]} шт.${limitText}`);
+  if (saveResult?.success) {
+    await syncWithServer();
+    const limitText = miner.maxQuantity ? ` (${minerQuantities[miner.id]}/${miner.maxQuantity})` : '';
+    tg.showAlert(`✅ Вы купили ${miner.name}! Теперь у вас ${minerQuantities[miner.id]} шт.${limitText}`);
+  } else {
+    tg.showAlert("❌ Ошибка при покупке");
+  }
 }
 
 function renderMinerCard(minerId) {
@@ -657,7 +659,6 @@ async function loadUserData(referrerId = null) {
       transactions: result.data.transactions || [] 
     };
     
-    // Загружаем количества майнеров
     if (result.data.minerQuantities) {
       minerQuantities = result.data.minerQuantities;
     } else if (result.data.gameState?.minerQuantities) {
@@ -665,11 +666,8 @@ async function loadUserData(referrerId = null) {
     }
     initMinerQuantities();
     
-    // ЗАГРУЖАЕМ НАКОПЛЕНИЯ С СЕРВЕРА
     accumulatedTon = result.data.accumulatedTon || 0;
     accumulatedGpu = result.data.accumulatedGpu || 0;
-    
-    console.log(`📦 Загружены накопления с сервера: TON=${accumulatedTon}, GPU=${accumulatedGpu}`);
     
     document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
     document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
@@ -681,7 +679,6 @@ async function loadUserData(referrerId = null) {
     updateMiningRateDisplay();
     
     lastMiningTimestamp = Date.now();
-    
     return true;
   }
   return false;
@@ -713,6 +710,7 @@ async function createWithdraw(amount, wallet) {
   if (result?.success) {
     document.getElementById("withdrawAmount").value = "";
     document.getElementById("withdrawWallet").value = "";
+    await syncWithServer();
     tg.showAlert("Заявка на вывод создана! Ожидайте подтверждения.");
     return true;
   }
@@ -750,6 +748,7 @@ async function loadTasksGame() {
 async function completeTask(taskId) {
   await apiRequest("tasks/complete", { taskId });
   await loadTasksGame();
+  await syncWithServer();
 }
 
 // ========== ПРОДАЖА GPU ==========
@@ -765,16 +764,21 @@ function initExchange() {
   }
   
   document.getElementById("sellGpuBtn").onclick = async () => {
+    await syncWithServer();
+    
     const amount = parseFloat(document.getElementById("sellGpuAmount").value);
     if (isNaN(amount) || amount <= 0) return;
-    if (playerData.gpuTokens < amount) { tg.showAlert("Недостаточно GPU"); return; }
+    if (playerData.gpuTokens < amount) { 
+      tg.showAlert("Недостаточно GPU"); 
+      return; 
+    }
+    
     const tonReceived = amount * EXCHANGE_RATE;
     playerData.gpuTokens -= amount;
     playerData.ton += tonReceived;
     
     updateUI();
-    // ✅ ПРАВИЛЬНЫЙ ФОРМАТ БЕЗ state
-    await apiRequest("save", { 
+    const saveResult = await apiRequest("save", { 
       ton: playerData.ton, 
       gpu: playerData.gpuTokens, 
       friends: playerData.friends,
@@ -783,13 +787,19 @@ function initExchange() {
       minerQuantities: minerQuantities 
     });
     
-    document.getElementById("sellGpuAmount").value = "";
-    tg.showAlert(`✅ Продано ${amount} GPU за ${tonReceived.toFixed(4)} TON`);
+    if (saveResult?.success) {
+      await syncWithServer();
+      document.getElementById("sellGpuAmount").value = "";
+      tg.showAlert(`✅ Продано ${amount} GPU за ${tonReceived.toFixed(4)} TON`);
+    } else {
+      tg.showAlert("❌ Ошибка при продаже");
+    }
   };
 }
 
 // ========== НАВИГАЦИЯ ==========
 window.openTab = async function(id, btn) {
+  await syncWithServer();
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
@@ -829,9 +839,11 @@ async function init() {
   await loadReferrals();
   initExchange();
   
-  // Запускаем клиентский майнинг (каждую секунду)
   lastMiningTimestamp = Date.now();
   startClientMining();
+  
+  // Синхронизация с сервером раз в 30 секунд
+  setInterval(syncWithServer, 30000);
   
   document.getElementById("claimAllBtn").onclick = claimAccumulatedReward;
   
@@ -850,6 +862,7 @@ async function init() {
     document.getElementById("depositConfirm").style.display = "none";
     document.getElementById("depositForm").style.display = "block";
     document.getElementById("depositAmount").value = "";
+    await syncWithServer();
     tg.showAlert("Спасибо! Ожидайте зачисления в ближайшее время.");
   };
   document.getElementById("cancelPayBtn").onclick = () => {
