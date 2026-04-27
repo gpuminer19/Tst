@@ -457,15 +457,34 @@ function startClientMining() {
 
 // ========== СБОР НАКОПЛЕННОГО ==========
 async function claimAccumulatedReward() {
+  // 1. Сначала получаем актуальные накопления с сервера
+  const syncResult = await apiRequest("register", {});
+  
+  if (!syncResult?.success) {
+    tg.showAlert("❌ Ошибка синхронизации. Попробуйте ещё раз.");
+    return;
+  }
+  
+  // 2. Берём РЕАЛЬНЫЕ накопления с сервера
+  const realAccumulatedTon = syncResult.data.accumulatedTon || 0;
+  const realAccumulatedGpu = syncResult.data.accumulatedGpu || 0;
+  
+  // 3. Обновляем локальные переменные
+  accumulatedTon = realAccumulatedTon;
+  accumulatedGpu = realAccumulatedGpu;
+  document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
+  document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
+  
+  // 4. Проверяем, есть ли что собирать
   if (accumulatedTon === 0 && accumulatedGpu === 0) {
     tg.showAlert("Накоплений пока нет! Купите майнеры и подождите.");
     return;
   }
   
+  // 5. Отправляем запрос на сохранение (обнуляем накопления)
   const newTon = playerData.ton + accumulatedTon;
   const newGpu = playerData.gpuTokens + accumulatedGpu;
   
-  // ✅ ПРАВИЛЬНЫЙ ФОРМАТ БЕЗ state
   const saveResult = await apiRequest("save", { 
     ton: newTon, 
     gpu: newGpu, 
@@ -491,7 +510,6 @@ async function claimAccumulatedReward() {
     tg.showAlert("❌ Ошибка при сборе награды. Попробуйте ещё раз.");
   }
 }
-
 // ========== ПОКУПКА МАЙНЕРОВ ==========
 async function buyMiner(minerId) {
   const miner = gpuTemplates.find(m => m.id === minerId);
