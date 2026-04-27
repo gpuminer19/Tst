@@ -34,10 +34,9 @@ const userSchema = new mongoose.Schema({
     date: String,
     earnedGpu: { type: Number, default: 0 }
   }],
-  gameState: { type: Object, default: { minerQuantities: {} } },
+  gameState: { type: Object, default: { minerQuantities: { basic: 1 } } },
   createdAt: { type: Date, default: Date.now },
   lastSeen: Date,
-  lastMiningUpdate: { type: Date, default: Date.now },
   totalDeposited: { type: Number, default: 0 },
   totalWithdrawn: { type: Number, default: 0 }
 });
@@ -89,58 +88,7 @@ const Admin = mongoose.model('Admin', adminSchema);
 const Task = mongoose.model('Task', taskSchema);
 const UserTask = mongoose.model('UserTask', userTaskSchema);
 
-// ========== РЕЙТЫ МАЙНЕРОВ (доход в час) ==========
-const MINERS_RATES = {
-  basic: { tonPerHour: 0.01 / 24, gpuPerHour: 15 / 24, price: 1, priceCurrency: "gpu", maxQuantity: 30 },
-  normal: { tonPerHour: 0.02 / 24, gpuPerHour: 15 / 24, price: 2, priceCurrency: "ton", maxQuantity: null },
-  pro: { tonPerHour: 0.1 / 24, gpuPerHour: 75 / 24, price: 10, priceCurrency: "ton", maxQuantity: null },
-  ultra: { tonPerHour: 0.6 / 24, gpuPerHour: 380 / 24, price: 50, priceCurrency: "ton", maxQuantity: null },
-  legendary: { tonPerHour: 1.4 / 24, gpuPerHour: 780 / 24, price: 100, priceCurrency: "ton", maxQuantity: null },
-  minex: { tonPerHour: 7 / 24, gpuPerHour: 1800 / 24, price: 500, priceCurrency: "ton", maxQuantity: null },
-  friend: { tonPerHour: 0.1 / 24, gpuPerHour: 15 / 24, price: 0, priceCurrency: "ref", isReferral: true, requiredActive: 10, requiredEarned: 30 },
-  bro: { tonPerHour: 0.5 / 24, gpuPerHour: 75 / 24, price: 0, priceCurrency: "ref", isReferral: true, requiredActive: 50, requiredEarned: 30 },
-  nexus: { tonPerHour: 1.5 / 24, gpuPerHour: 200 / 24, price: 0, priceCurrency: "ref", isReferral: true, requiredActive: 150, requiredEarned: 30 }
-};
-
-// ========== ФУНКЦИЯ ОФЛАЙН-МАЙНИНГА ==========
-async function updateMiningRewards(userId) {
-  const user = await User.findOne({ userId });
-  if (!user) return { ton: 0, gpu: 0 };
-  
-  const now = Date.now();
-  const lastUpdate = user.lastMiningUpdate || user.createdAt || now;
-  const deltaHours = (now - new Date(lastUpdate).getTime()) / (1000 * 3600);
-  
-  if (deltaHours <= 0 || deltaHours > 720) { // максимум 30 дней
-    user.lastMiningUpdate = new Date(now);
-    await user.save();
-    return { ton: 0, gpu: 0 };
-  }
-  
-  const minerQuantities = user.gameState?.minerQuantities || {};
-  
-  let totalTon = 0;
-  let totalGpu = 0;
-  
-  for (const [minerId, quantity] of Object.entries(minerQuantities)) {
-    const rate = MINERS_RATES[minerId];
-    if (rate && quantity > 0 && !rate.isReferral) {
-      totalTon += rate.tonPerHour * quantity * deltaHours;
-      totalGpu += rate.gpuPerHour * quantity * deltaHours;
-    }
-  }
-  
-  if (totalTon > 0 || totalGpu > 0) {
-    user.ton += totalTon;
-    user.gpu += totalGpu;
-    user.lastMiningUpdate = new Date(now);
-    await user.save();
-    console.log(`💰 Offline mining for ${userId}: +${totalTon.toFixed(6)} TON, +${totalGpu.toFixed(4)} GPU (${deltaHours.toFixed(2)} hours)`);
-  }
-  
-  return { ton: totalTon, gpu: totalGpu };
-}
-
+// ========== Вспомогательные функции ==========
 async function ensureAdminExists() {
   const existingAdmin = await Admin.findOne({ username: process.env.ADMIN_USER });
   if (!existingAdmin && process.env.ADMIN_USER && process.env.ADMIN_PASS) {
@@ -182,7 +130,7 @@ async function addEarnedGpuToReferrer(userId, earnedGpu) {
   return false;
 }
 
-// ========== API для игры ==========
+// ========== API для игры (БЕЗ АВТОМАТИЧЕСКОГО НАЧИСЛЕНИЯ) ==========
 app.post('/api/tg', async (req, res) => {
   const { action, user_id, name, referrer_id, amount, ton, gpu, friends, state, tonWallet, taskId, deposit_id } = req.body;
   
@@ -191,9 +139,6 @@ app.post('/api/tg', async (req, res) => {
     if (bannedUser) {
       return res.status(403).json({ success: false, error: 'BANNED', message: `Ваш аккаунт заблокирован. Причина: ${bannedUser.banReason || 'Нарушение правил'}` });
     }
-    
-    // Сначала обновляем офлайн-майнинг
-    await updateMiningRewards(user_id);
     
     // РЕГИСТРАЦИЯ
     if (action === 'register') {
@@ -207,8 +152,7 @@ app.post('/api/tg', async (req, res) => {
           gpu: 15,
           friends: 0,
           invitedFriends: [],
-          gameState: initialGameState,
-          lastMiningUpdate: new Date()
+          gameState: initialGameState
         });
         
         if (referrer_id && referrer_id !== user_id) {
@@ -243,7 +187,7 @@ app.post('/api/tg', async (req, res) => {
       });
     }
     
-    // СОХРАНЕНИЕ
+    // СОХРАНЕНИЕ (клиент сам отправляет новый баланс)
     if (action === 'save') {
       try {
         const oldUser = await User.findOne({ userId: user_id });
@@ -396,7 +340,7 @@ app.post('/api/tg', async (req, res) => {
   }
 });
 
-// ========== АДМИН-ПАНЕЛЬ (сокращённо, основные эндпоинты) ==========
+// ========== АДМИН-ПАНЕЛЬ ==========
 app.get('/admin/login', (req, res) => {
   res.send(`<!DOCTYPE html>
   <html><head><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login</title>
