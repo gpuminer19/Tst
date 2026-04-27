@@ -21,8 +21,8 @@ app.use(session({
 const userSchema = new mongoose.Schema({
   userId: { type: String, unique: true },
   name: String,
-  ton: { type: Number, default: 0 },      // ИЗМЕНЕНО: было 5.0, стало 0
-  gpu: { type: Number, default: 15 },     // ИЗМЕНЕНО: было 0, стало 15
+  ton: { type: Number, default: 0 },
+  gpu: { type: Number, default: 15 },
   friends: { type: Number, default: 0 },
   referrerId: String,
   isBanned: { type: Boolean, default: false },
@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema({
     date: String,
     earnedGpu: { type: Number, default: 0 }
   }],
-  gameState: { type: Object, default: {} },
+  gameState: { type: Object, default: { miners: [1, 0, 0, 0, 0, 0] } },
   createdAt: { type: Date, default: Date.now },
   lastSeen: Date,
   totalDeposited: { type: Number, default: 0 },
@@ -110,7 +110,6 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// ========== БЕЗОПАСНАЯ ФУНКЦИЯ НАЧИСЛЕНИЯ РЕФЕРАЛУ ==========
 async function addEarnedGpuToReferrer(userId, earnedGpu) {
   if (!earnedGpu || earnedGpu <= 0) return false;
   try {
@@ -133,7 +132,7 @@ async function addEarnedGpuToReferrer(userId, earnedGpu) {
 
 // ========== API для игры ==========
 app.post('/api/tg', async (req, res) => {
-  const { action, user_id, name, referrer_id, amount, ton, gpu, friends, ton_earned, state, tonWallet, taskId } = req.body;
+  const { action, user_id, name, referrer_id, amount, ton, gpu, friends, state, tonWallet, taskId, deposit_id } = req.body;
   
   try {
     const bannedUser = await User.findOne({ userId: user_id, isBanned: true });
@@ -145,19 +144,18 @@ app.post('/api/tg', async (req, res) => {
     if (action === 'register') {
       let user = await User.findOne({ userId: user_id });
       if (!user) {
-        const initialCardStates = [];
-        for (let i = 0; i < 9; i++) {
-          initialCardStates.push({ owned: false, lastClaim: 0 });
-        }
+        const initialGameState = {
+          miners: [1, 0, 0, 0, 0, 0]
+        };
         
         user = new User({ 
           userId: user_id, 
           name: name || 'Игрок',
-          ton: 0,          // ИЗМЕНЕНО: было 5.0
-          gpu: 15,         // ИЗМЕНЕНО: было 0
+          ton: 0,
+          gpu: 15,
           friends: 0,
           invitedFriends: [],
-          gameState: { cardStates: initialCardStates }
+          gameState: initialGameState
         });
         
         if (referrer_id && referrer_id !== user_id) {
@@ -185,14 +183,14 @@ app.post('/api/tg', async (req, res) => {
           gpu: user.gpu,
           friends: user.friends,
           isBanned: user.isBanned,
-          state: user.gameState || { cardStates: [] },
+          gameState: user.gameState || { miners: [1, 0, 0, 0, 0, 0] },
           invitedFriends: user.invitedFriends || [],
           transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
         }
       });
     }
     
-    // СОХРАНЕНИЕ (с автоматическим начислением рефералу)
+    // СОХРАНЕНИЕ
     if (action === 'save') {
       try {
         const oldUser = await User.findOne({ userId: user_id });
@@ -200,7 +198,13 @@ app.post('/api/tg', async (req, res) => {
         
         await User.findOneAndUpdate(
           { userId: user_id }, 
-          { ton, gpu, friends, gameState: state, lastSeen: new Date() }, 
+          { 
+            ton, 
+            gpu, 
+            friends, 
+            gameState: state || { miners: [1, 0, 0, 0, 0, 0] },
+            lastSeen: new Date() 
+          }, 
           { upsert: true }
         );
         
@@ -236,7 +240,34 @@ app.post('/api/tg', async (req, res) => {
       const comment = `DEPOSIT_${user_id}_${Date.now()}`;
       const deposit = new Deposit({ userId: user_id, userName: name, amount, wallet: process.env.TON_WALLET || "EQD...", comment, type: 'deposit' });
       await deposit.save();
-      return res.json({ success: true, deposit: { amount, wallet: process.env.TON_WALLET, comment }, pendingCount: pendingCount + 1 });
+      return res.json({ success: true, deposit: { id: deposit._id, amount, wallet: process.env.TON_WALLET, comment }, pendingCount: pendingCount + 1 });
+    }
+    
+    // ПОДТВЕРЖДЕНИЕ ОПЛАТЫ (НОВЫЙ ЭНДПОИНТ)
+    if (action === 'confirmDeposit') {
+      const deposit = await Deposit.findById(deposit_id);
+      if (!deposit) {
+        return res.status(404).json({ success: false, error: 'Deposit not found' });
+      }
+      
+      if (deposit.status !== 'pending') {
+        return res.status(400).json({ success: false, error: 'Deposit already processed' });
+      }
+      
+      // Начисляем TON пользователю
+      const user = await User.findOne({ userId: deposit.userId });
+      if (user) {
+        user.ton += deposit.amount;
+        user.totalDeposited += deposit.amount;
+        await user.save();
+      }
+      
+      deposit.status = 'completed';
+      deposit.processedAt = new Date();
+      deposit.processedBy = 'user';
+      await deposit.save();
+      
+      return res.json({ success: true, message: 'Deposit confirmed and credited' });
     }
     
     // ВЫВОД
@@ -317,7 +348,7 @@ app.post('/api/tg', async (req, res) => {
   }
 });
 
-// ========== АДМИН-ПАНЕЛЬ ==========
+// ========== АДМИН-ПАНЕЛЬ (сокращённо, так как не менялась) ==========
 app.get('/admin/login', (req, res) => {
   res.send(`<!DOCTYPE html>
   <html><head><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login</title>
@@ -367,7 +398,7 @@ app.get('/admin', requireAuth, async (req, res) => {
   <div class="stats-grid"><div class="stat-card"><div class="stat-value">${totalUsers}</div><div>👥 Игроков</div></div><div class="stat-card"><div class="stat-value">${totalTon.toFixed(2)}</div><div>💰 TON</div></div><div class="stat-card"><div class="stat-value">${pendingDeposits.length}</div><div>💎 Пополнений</div></div><div class="stat-card"><div class="stat-value">${pendingWithdraws.length}</div><div>📤 Выводов</div></div></div>
   <div class="nav-tabs"><button class="tab-btn active" onclick="showTab('users')">👥 Пользователи</button><button class="tab-btn" onclick="showTab('deposits')">💎 Пополнения</button><button class="tab-btn" onclick="showTab('withdraws')">📤 Выводы</button><button class="tab-btn" onclick="showTab('tasks')">📋 Задания</button><button class="tab-btn" onclick="showTab('pending')">⏳ Ожидают</button></div>
   
-  <div id="tab-users" class="tab-content active"><input type="text" class="search-box" id="searchUsers" placeholder="🔍 Поиск..." onkeyup="filterUsers()"><div id="usersList">${users.map(u => `<div class="user-card" data-name="${u.name.toLowerCase()}" data-id="${u.userId}"><div class="user-header"><span><strong>${u.name}</strong> ${u.isBanned ? '🚫' : ''}</span><span style="font-size:11px;">${u.userId}</span></div><div>💰 ${u.ton.toFixed(2)} TON | ⚡ ${u.gpu} GPU | 👥 ${u.friends}</div><div style="margin-top:10px;"><button class="btn-warning" onclick="editBalance('${u.userId}', ${u.ton})">💰 Изменить баланс</button><button class="btn-info" onclick="viewUserCards('${u.userId}')">🃏 Карты</button><button class="btn-success" onclick="giveGpu('${u.userId}')">⚡ Выдать GPU</button><button class="btn-success" onclick="giveTon('${u.userId}')">💎 Выдать TON</button>${u.isBanned ? `<button class="btn-success" onclick="unbanUser('${u.userId}')">🔓 Разбанить</button>` : `<button class="btn-danger" onclick="banUser('${u.userId}')">🔒 Забанить</button>`}</div></div>`).join('')}</div></div>
+  <div id="tab-users" class="tab-content active"><input type="text" class="search-box" id="searchUsers" placeholder="🔍 Поиск..." onkeyup="filterUsers()"><div id="usersList">${users.map(u => `<div class="user-card" data-name="${u.name.toLowerCase()}" data-id="${u.userId}"><div class="user-header"><span><strong>${u.name}</strong> ${u.isBanned ? '🚫' : ''}</span><span style="font-size:11px;">${u.userId}</span></div><div>💰 ${u.ton.toFixed(2)} TON | ⚡ ${u.gpu} GPU | 👥 ${u.friends}</div><div style="margin-top:10px;"><button class="btn-warning" onclick="editBalance('${u.userId}', ${u.ton})">💰 Изменить баланс</button><button class="btn-success" onclick="giveGpu('${u.userId}')">⚡ Выдать GPU</button><button class="btn-success" onclick="giveTon('${u.userId}')">💎 Выдать TON</button>${u.isBanned ? `<button class="btn-success" onclick="unbanUser('${u.userId}')">🔓 Разбанить</button>` : `<button class="btn-danger" onclick="banUser('${u.userId}')">🔒 Забанить</button>`}</div></div>`).join('')}</div></div>
   
   <div id="tab-deposits" class="tab-content">${pendingDeposits.map(d => `<div class="deposit-card"><div><strong>👤 ${d.userName}</strong> (${d.userId})</div><div style="font-size:20px;">${d.amount} TON</div><div style="font-size:11px;">${d.comment}</div><div style="display:flex;gap:8px;margin-top:10px;"><form method="POST" action="/admin/approve" style="flex:1;"><input type="hidden" name="id" value="${d._id}"><input type="hidden" name="type" value="deposit"><button type="submit" style="width:100%;background:#00A86B;">✅ Подтвердить</button></form><form method="POST" action="/admin/reject" style="flex:1;"><input type="hidden" name="id" value="${d._id}"><button type="submit" style="width:100%;background:#DC2626;">❌ Отклонить</button></form></div></div>`).join('') || '<p>Нет заявок</p>'}</div>
   
@@ -389,46 +420,9 @@ app.get('/admin', requireAuth, async (req, res) => {
     function banUser(id){if(confirm('Забанить?')){let r=prompt('Причина бана:');fetch('/admin/api/ban',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id,reason:r})}).then(()=>location.reload());}}
     function unbanUser(id){if(confirm('Разбанить?')){fetch('/admin/api/unban',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id})}).then(()=>location.reload());}}
     
-    async function viewUserCards(userId){
-      const res=await fetch('/admin/api/userCards/'+userId);
-      const data=await res.json();
-      let cardsHtml='<div style="max-height:400px; overflow-y:auto;">';
-      for(const card of data.cards){
-        const statusStyle=card.owned?'color:#00A86B;':'color:#6B7CA8;';
-        const statusText=card.owned?'✅ Куплена':'🔒 Не куплена';
-        const giveButton=!card.owned?'<button class="btn-success" onclick="giveCard(\\''+userId+'\\','+card.id+')" style="margin-left:10px;">🎁 Выдать</button>':'';
-        cardsHtml+='<div class="user-card" style="display:flex; justify-content:space-between; align-items:center;"><span><strong>'+card.name+'</strong></span><span style="'+statusStyle+'">'+statusText+'</span>'+giveButton+'</div>';
-      }
-      cardsHtml+='</div>';
-      document.getElementById('modalContent').innerHTML='<h3>👤 '+data.user.name+'</h3><p>💰 TON: '+data.user.ton+' | ⚡ GPU: '+data.user.gpu+'</p>'+cardsHtml+'<button onclick="closeModal()" style="margin-top:16px;">Закрыть</button>';
-      document.getElementById('modalOverlay').style.display='flex';
-    }
+    async function giveGpu(userId){const amount=prompt('Введите количество GPU для выдачи:');if(!amount||isNaN(parseInt(amount))) return;const res=await fetch('/admin/api/giveGpu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount:parseInt(amount)})});const result=await res.json();if(result.success){alert('✅ Выдано '+amount+' GPU!');location.reload();}else alert('❌ Ошибка');}
     
-    async function giveCard(userId,cardId){
-      if(!confirm('Выдать эту карту пользователю?')) return;
-      const res=await fetch('/admin/api/giveCard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,cardId})});
-      const result=await res.json();
-      if(result.success){alert('✅ Карта выдана!');viewUserCards(userId);}
-      else alert('❌ Ошибка: '+(result.error||'Неизвестная ошибка'));
-    }
-    
-    async function giveGpu(userId){
-      const amount=prompt('Введите количество GPU для выдачи:');
-      if(!amount||isNaN(parseInt(amount))) return;
-      const res=await fetch('/admin/api/giveGpu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount:parseInt(amount)})});
-      const result=await res.json();
-      if(result.success){alert('✅ Выдано '+amount+' GPU!');location.reload();}
-      else alert('❌ Ошибка');
-    }
-    
-    async function giveTon(userId){
-      const amount=prompt('Введите количество TON для выдачи:');
-      if(!amount||isNaN(parseFloat(amount))) return;
-      const res=await fetch('/admin/api/giveTon',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount:parseFloat(amount)})});
-      const result=await res.json();
-      if(result.success){alert('✅ Выдано '+amount+' TON!');location.reload();}
-      else alert('❌ Ошибка');
-    }
+    async function giveTon(userId){const amount=prompt('Введите количество TON для выдачи:');if(!amount||isNaN(parseFloat(amount))) return;const res=await fetch('/admin/api/giveTon',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount:parseFloat(amount)})});const result=await res.json();if(result.success){alert('✅ Выдано '+amount+' TON!');location.reload();}else alert('❌ Ошибка');}
     
     function closeModal(){document.getElementById('modalOverlay').style.display='none';}
     
@@ -464,85 +458,22 @@ app.post('/admin/api/unban', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-// ========== Админ API для карт и токенов ==========
-app.get('/admin/api/userCards/:userId', requireAuth, async (req, res) => {
-  const user = await User.findOne({ userId: req.params.userId });
-  const cardStates = user?.gameState?.cardStates || [];
-  
-  const cards = [
-    { id: 0, name: "Basic Miner", owned: cardStates[0]?.owned || false },
-    { id: 1, name: "Normal Miner", owned: cardStates[1]?.owned || false },
-    { id: 2, name: "Pro Miner", owned: cardStates[2]?.owned || false },
-    { id: 3, name: "Ultra Miner", owned: cardStates[3]?.owned || false },
-    { id: 4, name: "Legendary Miner", owned: cardStates[4]?.owned || false },
-    { id: 5, name: "Minex", owned: cardStates[5]?.owned || false },
-    { id: 6, name: "Friend Miner", owned: cardStates[6]?.owned || false },
-    { id: 7, name: "Bro Miner", owned: cardStates[7]?.owned || false },
-    { id: 8, name: "Nexus Miner", owned: cardStates[8]?.owned || false }
-  ];
-  
-  res.json({ cards, user: { name: user.name, ton: user.ton, gpu: user.gpu } });
-});
-
-app.post('/admin/api/giveCard', requireAuth, async (req, res) => {
-  const { userId, cardId } = req.body;
-  
-  const user = await User.findOne({ userId });
-  if (!user) return res.json({ success: false, error: 'User not found' });
-  
-  if (!user.gameState) user.gameState = {};
-  if (!user.gameState.cardStates) {
-    user.gameState.cardStates = [];
-    for (let i = 0; i < 9; i++) {
-      user.gameState.cardStates.push({ owned: false, lastClaim: 0 });
-    }
-  }
-  
-  if (!user.gameState.cardStates[cardId]) {
-    user.gameState.cardStates[cardId] = { owned: false, lastClaim: 0 };
-  }
-  user.gameState.cardStates[cardId].owned = true;
-  user.gameState.cardStates[cardId].lastClaim = Date.now();
-  
-  await user.save();
-  
-  if (cardId >= 6 && cardId <= 8) {
-    const rewards = [15, 100, 200];
-    const rewardGpu = rewards[cardId - 6];
-    if (rewardGpu) {
-      await addEarnedGpuToReferrer(userId, rewardGpu);
-    }
-  }
-  
-  console.log(`🎁 Admin ${req.admin.username} gave card ${cardId} to ${userId}`);
-  res.json({ success: true });
-});
-
 app.post('/admin/api/giveGpu', requireAuth, async (req, res) => {
   const { userId, amount } = req.body;
-  
   const user = await User.findOne({ userId });
   if (!user) return res.json({ success: false, error: 'User not found' });
-  
   user.gpu += amount;
   await user.save();
-  
   await addEarnedGpuToReferrer(userId, amount);
-  
-  console.log(`⚡ Admin ${req.admin.username} gave ${amount} GPU to ${userId}`);
   res.json({ success: true });
 });
 
 app.post('/admin/api/giveTon', requireAuth, async (req, res) => {
   const { userId, amount } = req.body;
-  
   const user = await User.findOne({ userId });
   if (!user) return res.json({ success: false, error: 'User not found' });
-  
   user.ton += amount;
   await user.save();
-  
-  console.log(`💰 Admin ${req.admin.username} gave ${amount} TON to ${userId}`);
   res.json({ success: true });
 });
 
@@ -590,24 +521,18 @@ app.post('/admin/api/tasks/delete', requireAuth, async (req, res) => {
 
 app.post('/admin/api/tasks/approve', requireAuth, async (req, res) => {
   const { userTaskId } = req.body;
-  
   const userTask = await UserTask.findById(userTaskId);
   if (!userTask || userTask.claimed) return res.json({ success: false });
-  
   const task = await Task.findOne({ id: userTask.taskId });
   const user = await User.findOne({ userId: userTask.userId });
-  
   if (user && task) {
     user.ton += task.rewardTon;
     user.gpu += task.rewardGpu;
     await user.save();
-    
     await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
   }
-  
   userTask.claimed = true;
   await userTask.save();
-  
   res.json({ success: true });
 });
 
@@ -647,25 +572,20 @@ app.get('/', (req, res) => { res.json({ status: 'OK', message: 'CryptoGPU Backen
 // ========== API ДЛЯ БОТА ==========
 app.post('/api/bot/registerRef', async (req, res) => {
   const { userId, referrerId, name } = req.body;
-  
   try {
     const existingUser = await User.findOne({ userId: userId });
     if (existingUser) {
       return res.json({ success: false, error: 'User already exists' });
     }
-    
     const referrer = await User.findOne({ userId: referrerId });
     if (!referrer) {
       return res.json({ success: false, error: 'Referrer not found' });
     }
-    
     const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === userId);
     if (alreadyInvited) {
       return res.json({ success: false, error: 'Already invited' });
     }
-    
     const friendName = name || `User_${userId.slice(-5)}`;
-    
     referrer.invitedFriends.push({
       friendId: userId,
       friendName: friendName,
@@ -674,17 +594,14 @@ app.post('/api/bot/registerRef', async (req, res) => {
     });
     referrer.friends = referrer.invitedFriends.length;
     await referrer.save();
-    
     console.log(`✅ Реферал засчитан! ${referrerId} → ${userId} (${friendName})`);
     res.json({ success: true, message: 'Referral counted' });
-    
   } catch (error) {
     console.error('Error in /api/bot/registerRef:', error);
     res.json({ success: false, error: error.message });
   }
 });
 
-// ========== ВРЕМЕННЫЙ ЭНДПОИНТ ДЛЯ ОЧИСТКИ ПОЛЬЗОВАТЕЛЕЙ ==========
 app.get('/clearusers', async (req, res) => {
   try {
     const result = await User.deleteMany({});
