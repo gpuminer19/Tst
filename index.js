@@ -112,7 +112,7 @@ async function calculateAndSaveOfflineAccumulated(userId) {
     const lastUpdate = user.lastMiningUpdate || user.createdAt || now;
     const deltaHours = (now - new Date(lastUpdate).getTime()) / (1000 * 3600);
     
-    console.log(`📊 Расчет для ${userId}: прошло ${deltaHours.toFixed(2)} часов с ${new Date(lastUpdate).toLocaleString()}`);
+    console.log(`📊 Расчет для ${userId}: прошло ${deltaHours.toFixed(4)} часов с ${new Date(lastUpdate).toLocaleString()}`);
     
     if (deltaHours <= 0 || deltaHours > 720) {
       user.lastMiningUpdate = new Date(now);
@@ -133,7 +133,7 @@ async function calculateAndSaveOfflineAccumulated(userId) {
       }
     }
     
-    console.log(`💰 ${userId}: накоплено за офлайн: +${totalTon.toFixed(6)} TON, +${totalGpu.toFixed(4)} GPU`);
+    console.log(`💰 ${userId}: накоплено за офлайн: +${totalTon.toFixed(8)} TON, +${totalGpu.toFixed(6)} GPU за ${deltaHours.toFixed(4)}ч`);
     
     if (totalTon > 0 || totalGpu > 0) {
       user.gameState = user.gameState || {};
@@ -143,6 +143,9 @@ async function calculateAndSaveOfflineAccumulated(userId) {
       await user.save();
       
       console.log(`✅ Сохранено ${userId}: accumulatedTon=${user.gameState.accumulatedTon}, accumulatedGpu=${user.gameState.accumulatedGpu}`);
+    } else {
+      user.lastMiningUpdate = new Date(now);
+      await user.save();
     }
     
     return { accumulatedTon: totalTon, accumulatedGpu: totalGpu };
@@ -241,16 +244,17 @@ app.post('/api/tg', async (req, res) => {
         console.log(`👤 Существующий пользователь: ${user_id}, lastMiningUpdate: ${user.lastMiningUpdate}`);
         await calculateAndSaveOfflineAccumulated(user_id);
         
-        // Обновляем данные пользователя после расчёта
+        // ОБНОВЛЯЕМ ДАННЫЕ ПОСЛЕ РАСЧЁТА
         user = await User.findOne({ userId: user_id });
       }
       
       const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
       
+      // БЕРЁМ НАКОПЛЕНИЯ ИЗ gameState
       const accumulatedTon = user.gameState?.accumulatedTon || 0;
       const accumulatedGpu = user.gameState?.accumulatedGpu || 0;
       
-      console.log(`📤 Отправка данных для ${user_id}: основной баланс TON=${user.ton}, GPU=${user.gpu}, накопления TON=${accumulatedTon}, GPU=${accumulatedGpu}`);
+      console.log(`📤 Отправка для ${user_id}: основной TON=${user.ton}, GPU=${user.gpu}, накопления TON=${accumulatedTon}, GPU=${accumulatedGpu}`);
       
       return res.json({
         success: true,
@@ -424,7 +428,7 @@ app.post('/api/tg', async (req, res) => {
   }
 });
 
-// ========== АДМИН-ПАНЕЛЬ (сокращённо) ==========
+// ========== АДМИН-ПАНЕЛЬ ==========
 app.get('/admin/login', (req, res) => {
   res.send(`<!DOCTYPE html>
   <html><head><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login</title>
