@@ -44,7 +44,7 @@ async function calculateOffline(userId) {
   const hoursPassed = (now - lastUpdate) / (1000 * 3600);
 
   // Если прошло меньше минуты или больше 30 дней — не считаем
-  if (hoursPassed < 0.016 || hoursPassed > 720) {
+  if (hoursPassed < 0.0001 || hoursPassed > 720) {
     user.lastMiningUpdate = now;
     await user.save();
     return;
