@@ -492,6 +492,9 @@ app.use(session({
   cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
 
+
+const path = require('path');
+app.use(express.static(__dirname));
 const PORT = process.env.PORT || 8080;
 mongoose.connect(process.env.MONGODB_URL).then(async () => {
   console.log('✅ Connected to MongoDB');
