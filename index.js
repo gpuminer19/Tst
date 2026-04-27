@@ -198,17 +198,9 @@ app.post('/api/tg', async (req, res) => {
     }
 
     // СОХРАНЕНИЕ
-    // СОХРАНЕНИЕ
+    //// СОХРАНЕНИЕ
 if (action === 'save') {
-  // ⚠️ ЗАЩИТА ОТ КОНФЛИКТОВ: не даём уменьшить баланс, если админ уже начислил
-  const existingUser = await User.findOne({ userId: user_id });
-  
-  if (existingUser && ton < existingUser.ton) {
-    console.log(`⚠️ Конфликт у ${user_id}: было ${existingUser.ton}, пытаются сохранить ${ton}`);
-    return res.json({ success: false, error: "CONFLICT" });
-  }
-  
-  const oldUser = existingUser;
+  const oldUser = await User.findOne({ userId: user_id });
   const oldGpu = oldUser?.gpu || 0;
 
   await User.findOneAndUpdate(
@@ -221,7 +213,6 @@ if (action === 'save') {
   if (earnedGpu > 0) await addEarnedGpuToReferrer(user_id, earnedGpu);
   return res.json({ success: true });
 }
-
     // РЕФЕРАЛЫ
     if (action === 'getReferrals') {
       const user = await User.findOne({ userId: user_id });
