@@ -272,38 +272,56 @@ app.post('/api/tg', async (req, res) => {
       });
     }
     
-    // СОХРАНЕНИЕ (клиент отправляет новый баланс после сбора награды)
-    if (action === 'save') {
-      try {
-        const oldUser = await User.findOne({ userId: user_id });
-        const oldGpu = oldUser?.gpu || 0;
-        
-        // Обновляем пользователя
-        await User.findOneAndUpdate(
-          { userId: user_id }, 
-          { 
-            ton, 
-            gpu, 
-            friends, 
-            gameState: state || { minerQuantities: { basic: 1 }, accumulatedTon: 0, accumulatedGpu: 0 },
-            lastSeen: new Date() 
-          }, 
-          { upsert: true }
-        );
-        
-        const earnedGpu = gpu - oldGpu;
-        if (earnedGpu > 0) {
-          await addEarnedGpuToReferrer(user_id, earnedGpu);
-        }
-        
-        console.log(`💾 Сохранено состояние для ${user_id}: TON=${ton}, GPU=${gpu}`);
-        
-        return res.json({ success: true });
-      } catch (error) {
-        console.error("Ошибка сохранения:", error);
-        return res.status(500).json({ success: false, error: "Server error" });
+// СОХРАНЕНИЕ
+if (action === 'save') {
+  try {
+    const oldUser = await User.findOne({ userId: user_id });
+    const oldGpu = oldUser?.gpu || 0;
+    
+    // ⬇️⬇️⬇️ НОВЫЙ КОД - НЕ ТРОГАЕМ НАКОПЛЕНИЯ ⬇️⬇️⬇️
+    let newGameState = state || { minerQuantities: { basic: 1 } };
+    
+    // Сохраняем старые накопления, если клиент их не прислал
+    if (oldUser?.gameState) {
+      if (newGameState.accumulatedTon === undefined && oldUser.gameState.accumulatedTon !== undefined) {
+        newGameState.accumulatedTon = oldUser.gameState.accumulatedTon;
+      }
+      if (newGameState.accumulatedGpu === undefined && oldUser.gameState.accumulatedGpu !== undefined) {
+        newGameState.accumulatedGpu = oldUser.gameState.accumulatedGpu;
       }
     }
+    
+    // Если всё-таки нет полей, ставим 0
+    if (newGameState.accumulatedTon === undefined) newGameState.accumulatedTon = 0;
+    if (newGameState.accumulatedGpu === undefined) newGameState.accumulatedGpu = 0;
+    // ⬆️⬆️⬆️ КОНЕЦ НОВОГО КОДА ⬆️⬆️⬆️
+    
+    await User.findOneAndUpdate(
+      { userId: user_id }, 
+      { 
+        ton, 
+        gpu, 
+        friends, 
+        gameState: newGameState,  // ← ЗДЕСЬ ТОЖЕ ИЗМЕНИЛОСЬ (было state, стало newGameState)
+        lastSeen: new Date() 
+      }, 
+      { upsert: true }
+    );
+    
+    const earnedGpu = gpu - oldGpu;
+    if (earnedGpu > 0) {
+      await addEarnedGpuToReferrer(user_id, earnedGpu);
+    }
+    
+    console.log(`💾 Сохранено состояние для ${user_id}: TON=${ton}, GPU=${gpu}, накопления=${newGameState.accumulatedTon}`);
+    
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Ошибка сохранения:", error);
+    return res.status(500).json({ success: false, error: "Server error" });
+  }
+}
+  
     
     // РЕФЕРАЛЫ
     if (action === 'getReferrals') {
