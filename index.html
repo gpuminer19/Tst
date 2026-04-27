@@ -465,11 +465,14 @@ async function claimAccumulatedReward() {
   const newTon = playerData.ton + accumulatedTon;
   const newGpu = playerData.gpuTokens + accumulatedGpu;
   
+  // ✅ ПРАВИЛЬНЫЙ ФОРМАТ БЕЗ state
   const saveResult = await apiRequest("save", { 
     ton: newTon, 
     gpu: newGpu, 
-    friends: playerData.friends, 
-    state: { minerQuantities: minerQuantities, accumulatedTon: 0, accumulatedGpu: 0 } 
+    friends: playerData.friends,
+    accumulatedTon: 0,
+    accumulatedGpu: 0,
+    minerQuantities: minerQuantities 
   });
   
   if (saveResult?.success) {
@@ -531,11 +534,14 @@ async function buyMiner(minerId) {
   renderMinerCard(miner.id);
   updateMiningRateDisplay();
   
+  // ✅ ПРАВИЛЬНЫЙ ФОРМАТ БЕЗ state
   await apiRequest("save", { 
     ton: playerData.ton, 
     gpu: playerData.gpuTokens, 
-    friends: playerData.friends, 
-    state: { minerQuantities: minerQuantities, accumulatedTon: accumulatedTon, accumulatedGpu: accumulatedGpu } 
+    friends: playerData.friends,
+    accumulatedTon: accumulatedTon,
+    accumulatedGpu: accumulatedGpu,
+    minerQuantities: minerQuantities 
   });
   
   const limitText = miner.maxQuantity ? ` (${minerQuantities[miner.id]}/${miner.maxQuantity})` : '';
@@ -633,12 +639,15 @@ async function loadUserData(referrerId = null) {
       transactions: result.data.transactions || [] 
     };
     
-    if (result.data.gameState?.minerQuantities) {
+    // Загружаем количества майнеров
+    if (result.data.minerQuantities) {
+      minerQuantities = result.data.minerQuantities;
+    } else if (result.data.gameState?.minerQuantities) {
       minerQuantities = result.data.gameState.minerQuantities;
     }
     initMinerQuantities();
     
-    // ЗАГРУЖАЕМ НАКОПЛЕНИЯ С СЕРВЕРА!
+    // ЗАГРУЖАЕМ НАКОПЛЕНИЯ С СЕРВЕРА
     accumulatedTon = result.data.accumulatedTon || 0;
     accumulatedGpu = result.data.accumulatedGpu || 0;
     
@@ -746,11 +755,14 @@ function initExchange() {
     playerData.ton += tonReceived;
     
     updateUI();
+    // ✅ ПРАВИЛЬНЫЙ ФОРМАТ БЕЗ state
     await apiRequest("save", { 
       ton: playerData.ton, 
       gpu: playerData.gpuTokens, 
-      friends: playerData.friends, 
-      state: { minerQuantities: minerQuantities, accumulatedTon: accumulatedTon, accumulatedGpu: accumulatedGpu } 
+      friends: playerData.friends,
+      accumulatedTon: accumulatedTon,
+      accumulatedGpu: accumulatedGpu,
+      minerQuantities: minerQuantities 
     });
     
     document.getElementById("sellGpuAmount").value = "";
