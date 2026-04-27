@@ -91,56 +91,65 @@ const UserTask = mongoose.model('UserTask', userTaskSchema);
 
 // ========== РЕЙТЫ МАЙНЕРОВ (доход в час) ==========
 const MINERS_RATES = {
-  basic: { tonPerHour: 0.01 / 24, gpuPerHour: 15 / 24, price: 1, priceCurrency: "gpu", maxQuantity: 30 },
-  normal: { tonPerHour: 0.02 / 24, gpuPerHour: 15 / 24, price: 2, priceCurrency: "ton", maxQuantity: null },
-  pro: { tonPerHour: 0.1 / 24, gpuPerHour: 75 / 24, price: 10, priceCurrency: "ton", maxQuantity: null },
-  ultra: { tonPerHour: 0.6 / 24, gpuPerHour: 380 / 24, price: 50, priceCurrency: "ton", maxQuantity: null },
-  legendary: { tonPerHour: 1.4 / 24, gpuPerHour: 780 / 24, price: 100, priceCurrency: "ton", maxQuantity: null },
-  minex: { tonPerHour: 7 / 24, gpuPerHour: 1800 / 24, price: 500, priceCurrency: "ton", maxQuantity: null },
-  friend: { tonPerHour: 0.1 / 24, gpuPerHour: 15 / 24, price: 0, priceCurrency: "ref", isReferral: true, requiredActive: 10, requiredEarned: 30 },
-  bro: { tonPerHour: 0.5 / 24, gpuPerHour: 75 / 24, price: 0, priceCurrency: "ref", isReferral: true, requiredActive: 50, requiredEarned: 30 },
-  nexus: { tonPerHour: 1.5 / 24, gpuPerHour: 200 / 24, price: 0, priceCurrency: "ref", isReferral: true, requiredActive: 150, requiredEarned: 30 }
+  basic: { tonPerHour: 0.01 / 24, gpuPerHour: 15 / 24 },
+  normal: { tonPerHour: 0.02 / 24, gpuPerHour: 15 / 24 },
+  pro: { tonPerHour: 0.1 / 24, gpuPerHour: 75 / 24 },
+  ultra: { tonPerHour: 0.6 / 24, gpuPerHour: 380 / 24 },
+  legendary: { tonPerHour: 1.4 / 24, gpuPerHour: 780 / 24 },
+  minex: { tonPerHour: 7 / 24, gpuPerHour: 1800 / 24 }
 };
 
-// ========== ФУНКЦИЯ ОФЛАЙН-НАКОПЛЕНИЙ (не трогает основной баланс!) ==========
-async function updateOfflineAccumulated(userId) {
-  const user = await User.findOne({ userId });
-  if (!user) return { accumulatedTon: 0, accumulatedGpu: 0 };
-  
-  const now = Date.now();
-  const lastUpdate = user.lastMiningUpdate || user.createdAt || now;
-  const deltaHours = (now - new Date(lastUpdate).getTime()) / (1000 * 3600);
-  
-  if (deltaHours <= 0 || deltaHours > 720) { // максимум 30 дней
-    user.lastMiningUpdate = new Date(now);
-    await user.save();
+// ========== ФУНКЦИЯ ОФЛАЙН-НАКОПЛЕНИЙ ==========
+async function calculateAndSaveOfflineAccumulated(userId) {
+  try {
+    const user = await User.findOne({ userId });
+    if (!user) {
+      console.log(`❌ Пользователь ${userId} не найден`);
+      return { accumulatedTon: 0, accumulatedGpu: 0 };
+    }
+    
+    const now = Date.now();
+    const lastUpdate = user.lastMiningUpdate || user.createdAt || now;
+    const deltaHours = (now - new Date(lastUpdate).getTime()) / (1000 * 3600);
+    
+    console.log(`📊 Расчет для ${userId}: прошло ${deltaHours.toFixed(2)} часов с ${new Date(lastUpdate).toLocaleString()}`);
+    
+    if (deltaHours <= 0 || deltaHours > 720) {
+      user.lastMiningUpdate = new Date(now);
+      await user.save();
+      return { accumulatedTon: 0, accumulatedGpu: 0 };
+    }
+    
+    const minerQuantities = user.gameState?.minerQuantities || { basic: 1 };
+    
+    let totalTon = 0;
+    let totalGpu = 0;
+    
+    for (const [minerId, quantity] of Object.entries(minerQuantities)) {
+      const rate = MINERS_RATES[minerId];
+      if (rate && quantity > 0) {
+        totalTon += rate.tonPerHour * quantity * deltaHours;
+        totalGpu += rate.gpuPerHour * quantity * deltaHours;
+      }
+    }
+    
+    console.log(`💰 ${userId}: накоплено за офлайн: +${totalTon.toFixed(6)} TON, +${totalGpu.toFixed(4)} GPU`);
+    
+    if (totalTon > 0 || totalGpu > 0) {
+      user.gameState = user.gameState || {};
+      user.gameState.accumulatedTon = (user.gameState.accumulatedTon || 0) + totalTon;
+      user.gameState.accumulatedGpu = (user.gameState.accumulatedGpu || 0) + totalGpu;
+      user.lastMiningUpdate = new Date(now);
+      await user.save();
+      
+      console.log(`✅ Сохранено ${userId}: accumulatedTon=${user.gameState.accumulatedTon}, accumulatedGpu=${user.gameState.accumulatedGpu}`);
+    }
+    
+    return { accumulatedTon: totalTon, accumulatedGpu: totalGpu };
+  } catch (error) {
+    console.error(`Ошибка в calculateAndSaveOfflineAccumulated для ${userId}:`, error);
     return { accumulatedTon: 0, accumulatedGpu: 0 };
   }
-  
-  const minerQuantities = user.gameState?.minerQuantities || {};
-  
-  let totalTon = 0;
-  let totalGpu = 0;
-  
-  for (const [minerId, quantity] of Object.entries(minerQuantities)) {
-    const rate = MINERS_RATES[minerId];
-    if (rate && quantity > 0 && !rate.isReferral) {
-      totalTon += rate.tonPerHour * quantity * deltaHours;
-      totalGpu += rate.gpuPerHour * quantity * deltaHours;
-    }
-  }
-  
-  if (totalTon > 0 || totalGpu > 0) {
-    // Сохраняем в НАКОПЛЕНИЯ, а не в основной баланс!
-    user.gameState = user.gameState || {};
-    user.gameState.accumulatedTon = (user.gameState.accumulatedTon || 0) + totalTon;
-    user.gameState.accumulatedGpu = (user.gameState.accumulatedGpu || 0) + totalGpu;
-    user.lastMiningUpdate = new Date(now);
-    await user.save();
-    console.log(`📦 Offline accumulated for ${userId}: +${totalTon.toFixed(6)} TON, +${totalGpu.toFixed(4)} GPU (${deltaHours.toFixed(2)} hours)`);
-  }
-  
-  return { accumulatedTon: totalTon, accumulatedGpu: totalGpu };
 }
 
 // ========== Вспомогательные функции ==========
@@ -195,12 +204,10 @@ app.post('/api/tg', async (req, res) => {
       return res.status(403).json({ success: false, error: 'BANNED', message: `Ваш аккаунт заблокирован. Причина: ${bannedUser.banReason || 'Нарушение правил'}` });
     }
     
-    // Сначала обновляем офлайн-накопления (но не трогаем основной баланс!)
-    await updateOfflineAccumulated(user_id);
-    
     // РЕГИСТРАЦИЯ
     if (action === 'register') {
       let user = await User.findOne({ userId: user_id });
+      
       if (!user) {
         const initialGameState = { minerQuantities: { basic: 1 }, accumulatedTon: 0, accumulatedGpu: 0 };
         user = new User({ 
@@ -228,13 +235,22 @@ app.post('/api/tg', async (req, res) => {
           }
         }
         await user.save();
+        console.log(`🆕 Новый пользователь: ${user_id}`);
+      } else {
+        // Существующий пользователь - считаем офлайн-накопления
+        console.log(`👤 Существующий пользователь: ${user_id}, lastMiningUpdate: ${user.lastMiningUpdate}`);
+        await calculateAndSaveOfflineAccumulated(user_id);
+        
+        // Обновляем данные пользователя после расчёта
+        user = await User.findOne({ userId: user_id });
       }
       
       const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
       
-      // Отправляем клиенту отдельно основной баланс и накопления
       const accumulatedTon = user.gameState?.accumulatedTon || 0;
       const accumulatedGpu = user.gameState?.accumulatedGpu || 0;
+      
+      console.log(`📤 Отправка данных для ${user_id}: основной баланс TON=${user.ton}, GPU=${user.gpu}, накопления TON=${accumulatedTon}, GPU=${accumulatedGpu}`);
       
       return res.json({
         success: true,
@@ -258,6 +274,7 @@ app.post('/api/tg', async (req, res) => {
         const oldUser = await User.findOne({ userId: user_id });
         const oldGpu = oldUser?.gpu || 0;
         
+        // Обновляем пользователя
         await User.findOneAndUpdate(
           { userId: user_id }, 
           { 
@@ -274,6 +291,8 @@ app.post('/api/tg', async (req, res) => {
         if (earnedGpu > 0) {
           await addEarnedGpuToReferrer(user_id, earnedGpu);
         }
+        
+        console.log(`💾 Сохранено состояние для ${user_id}: TON=${ton}, GPU=${gpu}`);
         
         return res.json({ success: true });
       } catch (error) {
@@ -405,7 +424,7 @@ app.post('/api/tg', async (req, res) => {
   }
 });
 
-// ========== АДМИН-ПАНЕЛЬ ==========
+// ========== АДМИН-ПАНЕЛЬ (сокращённо) ==========
 app.get('/admin/login', (req, res) => {
   res.send(`<!DOCTYPE html>
   <html><head><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login</title>
