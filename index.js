@@ -443,4 +443,236 @@ app.get('/admin', requireAuth, async (req, res) => {
   </div>
   
   <div class="header"><div style="display:flex;justify-content:space-between;"><h1>⚡ CryptoGPU</h1><a href="/admin/logout" style="color:#FF8C00;">Выйти</a></div></div>
-  <div class="stats-grid"><div class="stat-card"><div class="stat-value">${totalUsers}</div><div>👥 Игроков</div></div><div class="stat-card"><div class="stat-value">${totalTon.toFixed(2)}</div><div>💰 TON</div></div><div class="stat-card"><div class="stat-value">${pendingDeposits.length}</div><div>💎 Пополнений</div></div><div class="stat-card"><div class="stat-valu
+  <div class="stats-grid"><div class="stat-card"><div class="stat-value">${totalUsers}</div><div>👥 Игроков</div></div><div class="stat-card"><div class="stat-value">${totalTon.toFixed(2)}</div><div>💰 TON</div></div><div class="stat-card"><div class="stat-value">${pendingDeposits.length}</div><div>💎 Пополнений</div></div><div class="stat-card"><div class="stat-value">${pendingWithdraws.length}</div><div>📤 Выводов</div></div></div>
+  <div class="nav-tabs"><button class="tab-btn active" onclick="showTab('users')">👥 Пользователи</button><button class="tab-btn" onclick="showTab('deposits')">💎 Пополнения</button><button class="tab-btn" onclick="showTab('withdraws')">📤 Выводы</button><button class="tab-btn" onclick="showTab('tasks')">📋 Задания</button><button class="tab-btn" onclick="showTab('pending')">⏳ Ожидают</button></div>
+  
+  <div id="tab-users" class="tab-content active"><input type="text" class="search-box" id="searchUsers" placeholder="🔍 Поиск..." onkeyup="filterUsers()"><div id="usersList">${users.map(u => `<div class="user-card" data-name="${u.name.toLowerCase()}" data-id="${u.userId}"><div class="user-header"><span><strong>${u.name}</strong> ${u.isBanned ? '🚫' : ''}</span><span style="font-size:11px;">${u.userId}</span></div><div>💰 ${u.ton.toFixed(2)} TON | ⚡ ${u.gpu} GPU | 👥 ${u.friends}</div><div style="margin-top:10px;"><button class="btn-warning" onclick="editBalance('${u.userId}', ${u.ton})">💰 Изменить баланс</button><button class="btn-success" onclick="giveGpu('${u.userId}')">⚡ Выдать GPU</button><button class="btn-success" onclick="giveTon('${u.userId}')">💎 Выдать TON</button>${u.isBanned ? `<button class="btn-success" onclick="unbanUser('${u.userId}')">🔓 Разбанить</button>` : `<button class="btn-danger" onclick="banUser('${u.userId}')">🔒 Забанить</button>`}</div></div>`).join('')}</div></div>
+  
+  <div id="tab-deposits" class="tab-content">${pendingDeposits.map(d => `<div class="deposit-card"><div><strong>👤 ${d.userName}</strong> (${d.userId})</div><div style="font-size:20px;">${d.amount} TON</div><div style="font-size:11px;">${d.comment}</div><div style="display:flex;gap:8px;margin-top:10px;"><form method="POST" action="/admin/approve" style="flex:1;"><input type="hidden" name="id" value="${d._id}"><input type="hidden" name="type" value="deposit"><button type="submit" style="width:100%;background:#00A86B;">✅ Подтвердить</button></form><form method="POST" action="/admin/reject" style="flex:1;"><input type="hidden" name="id" value="${d._id}"><button type="submit" style="width:100%;background:#DC2626;">❌ Отклонить</button></form></div></div>`).join('') || '<p>Нет заявок</p>'}</div>
+  
+  <div id="tab-withdraws" class="tab-content">${pendingWithdraws.map(w => `<div class="deposit-card"><div><strong>👤 ${w.userName}</strong> (${w.userId})</div><div style="font-size:20px;">${w.amount} TON</div><div style="font-size:11px;">📤 ${w.wallet}</div><div style="display:flex;gap:8px;margin-top:10px;"><form method="POST" action="/admin/approve" style="flex:1;"><input type="hidden" name="id" value="${w._id}"><input type="hidden" name="type" value="withdraw"><button type="submit" style="width:100%;background:#FF8C00;">💰 Подтвердить вывод</button></form><form method="POST" action="/admin/reject" style="flex:1;"><input type="hidden" name="id" value="${w._id}"><button type="submit" style="width:100%;background:#DC2626;">❌ Отклонить</button></form></div></div>`).join('') || '<p>Нет заявок</p>'}</div>
+  
+  <div id="tab-tasks" class="tab-content"><button class="btn-success" onclick="showTaskModal()" style="margin-bottom:16px;">➕ Добавить задание</button><div id="tasksList"></div></div>
+  
+  <div id="tab-pending" class="tab-content"><div id="pendingTasksList"></div></div>
+  
+  <div class="bottom-nav"><button onclick="showTab('users')">👥</button><button onclick="showTab('deposits')">💎</button><button onclick="showTab('withdraws')">📤</button><button onclick="showTab('tasks')">📋</button><button onclick="showTab('pending')">⏳</button></div>
+  
+  <div id="taskModal" class="modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);justify-content:center;align-items:center;z-index:1000;"><div class="modal-content" style="background:#1A1F35;border-radius:28px;padding:24px;width:90%;max-width:400px;"><h3 id="taskModalTitle">Добавить задание</h3><input type="hidden" id="taskId"><input type="text" id="taskTitle" placeholder="Название" style="width:100%;padding:12px;margin:10px 0;background:#0B0E1A;border:1px solid #00D4FF;border-radius:12px;color:#fff;"><input type="text" id="taskDescription" placeholder="Описание" style="width:100%;padding:12px;margin:10px 0;background:#0B0E1A;border:1px solid #00D4FF;border-radius:12px;color:#fff;"><input type="number" id="taskRewardTon" placeholder="Награда TON" step="0.1" style="width:100%;padding:12px;margin:10px 0;background:#0B0E1A;border:1px solid #00D4FF;border-radius:12px;color:#fff;"><input type="number" id="taskRewardGpu" placeholder="Награда GPU" style="width:100%;padding:12px;margin:10px 0;background:#0B0E1A;border:1px solid #00D4FF;border-radius:12px;color:#fff;"><select id="taskType" style="width:100%;padding:12px;margin:10px 0;background:#0B0E1A;border:1px solid #00D4FF;border-radius:12px;color:#fff;"><option value="manual">Ручная проверка</option><option value="subscribe">Подписка</option><option value="check">Проверка</option></select><input type="text" id="taskTaskUrl" placeholder="Ссылка (если есть)" style="width:100%;padding:12px;margin:10px 0;background:#0B0E1A;border:1px solid #00D4FF;border-radius:12px;color:#fff;"><select id="taskIsDaily" style="width:100%;padding:12px;margin:10px 0;background:#0B0E1A;border:1px solid #00D4FF;border-radius:12px;color:#fff;"><option value="true">Ежедневное</option><option value="false">Одноразовое</option></select><input type="number" id="taskOrder" placeholder="Порядок" style="width:100%;padding:12px;margin:10px 0;background:#0B0E1A;border:1px solid #00D4FF;border-radius:12px;color:#fff;"><button onclick="saveTask()" style="background:#00A86B;padding:12px;border-radius:40px;width:100%;margin-top:10px;">Сохранить</button><button onclick="closeTaskModal()" style="background:#DC2626;padding:12px;border-radius:40px;width:100%;margin-top:10px;">Отмена</button></div></div>
+  
+  <script>
+    function showTab(tab){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));document.getElementById('tab-'+tab).classList.add('active');document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));event.target.classList.add('active');}
+    function filterUsers(){const s=document.getElementById('searchUsers').value.toLowerCase();document.querySelectorAll('.user-card').forEach(c=>{c.style.display=(c.getAttribute('data-name').includes(s)||c.getAttribute('data-id').includes(s))?'block':'none'});}
+    let currentUserId=null;
+    function editBalance(id,bal){currentUserId=id;let nb=prompt('Новый баланс TON:',bal);if(nb&&!isNaN(parseFloat(nb))){fetch('/admin/api/balance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:currentUserId,newBalance:parseFloat(nb),reason:'Admin edit'})}).then(()=>location.reload());}}
+    function banUser(id){if(confirm('Забанить?')){let r=prompt('Причина бана:');fetch('/admin/api/ban',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id,reason:r})}).then(()=>location.reload());}}
+    function unbanUser(id){if(confirm('Разбанить?')){fetch('/admin/api/unban',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id})}).then(()=>location.reload());}}
+    
+    async function giveGpu(userId){const amount=prompt('Введите количество GPU для выдачи:');if(!amount||isNaN(parseInt(amount))) return;const res=await fetch('/admin/api/giveGpu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount:parseInt(amount)})});const result=await res.json();if(result.success){alert('✅ Выдано '+amount+' GPU!');location.reload();}else alert('❌ Ошибка');}
+    
+    async function giveTon(userId){const amount=prompt('Введите количество TON для выдачи:');if(!amount||isNaN(parseFloat(amount))) return;const res=await fetch('/admin/api/giveTon',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount:parseFloat(amount)})});const result=await res.json();if(result.success){alert('✅ Выдано '+amount+' TON!');location.reload();}else alert('❌ Ошибка');}
+    
+    function closeModal(){document.getElementById('modalOverlay').style.display='none';}
+    
+    async function loadTasks(){const res=await fetch('/admin/api/tasks/list');const data=await res.json();const container=document.getElementById('tasksList');if(!container)return;container.innerHTML=data.tasks.map(t=>'<div class="user-card"><div><strong>'+t.title+'</strong> - '+t.description+'</div><div>💰 +'+t.rewardTon+' TON | ⚡ +'+t.rewardGpu+' GPU | '+(t.isDaily?'Ежедневное':'Одноразовое')+'</div><div style="margin-top:10px;"><button class="btn-warning" onclick="editTask(\\''+t.id+'\\')">✏️ Редактировать</button><button class="btn-danger" onclick="deleteTask(\\''+t.id+'\\')">🗑️ Удалить</button></div></div>').join('');}
+    
+    async function loadPendingTasks(){const res=await fetch('/admin/api/tasks/pending');const data=await res.json();const container=document.getElementById('pendingTasksList');if(!container)return;if(data.tasks.length===0){container.innerHTML='<p>Нет заданий на подтверждение</p>';return;}container.innerHTML=data.tasks.map(t=>'<div class="deposit-card"><div><strong>👤 '+t.userName+'</strong> ('+t.userId+')</div><div>📋 Задание: '+t.taskTitle+'</div><div>💰 Награда: +'+t.rewardTon+' TON | ⚡ +'+t.rewardGpu+' GPU</div><div style="margin-top:10px;"><button class="btn-success" onclick="approveTask(\\''+t.userTaskId+'\\')">✅ Подтвердить</button></div></div>').join('');}
+    
+    async function approveTask(userTaskId){await fetch('/admin/api/tasks/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userTaskId})});loadPendingTasks();}
+    
+    function showTaskModal(){document.getElementById('taskModalTitle').innerText='Добавить задание';document.getElementById('taskId').value='';document.getElementById('taskTitle').value='';document.getElementById('taskDescription').value='';document.getElementById('taskRewardTon').value='';document.getElementById('taskRewardGpu').value='';document.getElementById('taskType').value='manual';document.getElementById('taskTaskUrl').value='';document.getElementById('taskIsDaily').value='true';document.getElementById('taskOrder').value='';document.getElementById('taskModal').style.display='flex';}
+    function closeTaskModal(){document.getElementById('taskModal').style.display='none';}
+    async function editTask(id){const res=await fetch('/admin/api/tasks/list');const data=await res.json();const task=data.tasks.find(t=>t.id===id);if(!task)return;document.getElementById('taskModalTitle').innerText='Редактировать задание';document.getElementById('taskId').value=task.id;document.getElementById('taskTitle').value=task.title;document.getElementById('taskDescription').value=task.description;document.getElementById('taskRewardTon').value=task.rewardTon;document.getElementById('taskRewardGpu').value=task.rewardGpu;document.getElementById('taskType').value=task.type;document.getElementById('taskTaskUrl').value=task.taskUrl||'';document.getElementById('taskIsDaily').value=task.isDaily?'true':'false';document.getElementById('taskOrder').value=task.order;document.getElementById('taskModal').style.display='flex';}
+    async function saveTask(){const task={id:document.getElementById('taskId').value,title:document.getElementById('taskTitle').value,description:document.getElementById('taskDescription').value,rewardTon:parseFloat(document.getElementById('taskRewardTon').value),rewardGpu:parseInt(document.getElementById('taskRewardGpu').value),type:document.getElementById('taskType').value,taskUrl:document.getElementById('taskTaskUrl').value,isDaily:document.getElementById('taskIsDaily').value==='true',order:parseInt(document.getElementById('taskOrder').value)||0};await fetch('/admin/api/tasks/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(task)});closeTaskModal();loadTasks();}
+    async function deleteTask(id){if(!confirm('Удалить задание?'))return;await fetch('/admin/api/tasks/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});loadTasks();}
+    loadTasks();loadPendingTasks();
+  </script>
+  </body></html>`);
+});
+
+// ========== API для админ-панели ==========
+app.post('/admin/api/balance', requireAuth, async (req, res) => {
+  await User.findOneAndUpdate({ userId: req.body.userId }, { ton: req.body.newBalance });
+  res.json({ success: true });
+});
+
+app.post('/admin/api/ban', requireAuth, async (req, res) => {
+  await User.findOneAndUpdate({ userId: req.body.userId }, { isBanned: true, banReason: req.body.reason });
+  res.json({ success: true });
+});
+
+app.post('/admin/api/unban', requireAuth, async (req, res) => {
+  await User.findOneAndUpdate({ userId: req.body.userId }, { isBanned: false, banReason: null });
+  res.json({ success: true });
+});
+
+app.post('/admin/api/giveGpu', requireAuth, async (req, res) => {
+  const { userId, amount } = req.body;
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false, error: 'User not found' });
+  user.gpu += amount;
+  await user.save();
+  await addEarnedGpuToReferrer(userId, amount);
+  res.json({ success: true });
+});
+
+app.post('/admin/api/giveTon', requireAuth, async (req, res) => {
+  const { userId, amount } = req.body;
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false, error: 'User not found' });
+  user.ton += amount;
+  await user.save();
+  res.json({ success: true });
+});
+
+// ========== Админ API для заданий ==========
+app.get('/admin/api/tasks/list', requireAuth, async (req, res) => {
+  const tasks = await Task.find().sort({ order: 1 });
+  res.json({ tasks });
+});
+
+app.get('/admin/api/tasks/pending', requireAuth, async (req, res) => {
+  const pendingTasks = await UserTask.find({ claimed: false });
+  const tasks = [];
+  for (const pt of pendingTasks) {
+    const task = await Task.findOne({ id: pt.taskId });
+    const user = await User.findOne({ userId: pt.userId });
+    if (task && user) {
+      tasks.push({
+        userTaskId: pt._id,
+        userId: pt.userId,
+        userName: user.name,
+        taskTitle: task.title,
+        rewardTon: task.rewardTon,
+        rewardGpu: task.rewardGpu
+      });
+    }
+  }
+  res.json({ tasks });
+});
+
+app.post('/admin/api/tasks/save', requireAuth, async (req, res) => {
+  const { id, title, description, rewardTon, rewardGpu, type, taskUrl, isDaily, order } = req.body;
+  await Task.findOneAndUpdate(
+    { id: id || `task_${Date.now()}` },
+    { title, description, rewardTon, rewardGpu, type, taskUrl, isDaily, order, isActive: true },
+    { upsert: true }
+  );
+  res.json({ success: true });
+});
+
+app.post('/admin/api/tasks/delete', requireAuth, async (req, res) => {
+  const { id } = req.body;
+  await Task.findOneAndDelete({ id });
+  res.json({ success: true });
+});
+
+app.post('/admin/api/tasks/approve', requireAuth, async (req, res) => {
+  const { userTaskId } = req.body;
+  const userTask = await UserTask.findById(userTaskId);
+  if (!userTask || userTask.claimed) return res.json({ success: false });
+  const task = await Task.findOne({ id: userTask.taskId });
+  const user = await User.findOne({ userId: userTask.userId });
+  if (user && task) {
+    user.ton += task.rewardTon;
+    user.gpu += task.rewardGpu;
+    await user.save();
+    await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
+  }
+  userTask.claimed = true;
+  await userTask.save();
+  res.json({ success: true });
+});
+
+// ========== Обработка заявок ==========
+app.post('/admin/approve', requireAuth, async (req, res) => {
+  const transaction = await Deposit.findById(req.body.id);
+  if (!transaction || transaction.status !== 'pending') return res.redirect('/admin');
+  const user = await User.findOne({ userId: transaction.userId });
+  if (req.body.type === 'deposit') {
+    user.ton += transaction.amount;
+    user.totalDeposited += transaction.amount;
+    transaction.status = 'completed';
+  } else if (req.body.type === 'withdraw') {
+    user.totalWithdrawn += transaction.amount;
+    transaction.status = 'completed';
+  }
+  transaction.processedAt = new Date();
+  transaction.processedBy = req.admin.username;
+  await user.save();
+  await transaction.save();
+  res.redirect('/admin');
+});
+
+app.post('/admin/reject', requireAuth, async (req, res) => {
+  const transaction = await Deposit.findById(req.body.id);
+  if (transaction && transaction.type === 'withdraw' && transaction.status === 'pending') {
+    const user = await User.findOne({ userId: transaction.userId });
+    if (user) { user.ton += transaction.amount; await user.save(); }
+  }
+  await Deposit.findByIdAndUpdate(req.body.id, { status: 'cancelled', processedBy: req.admin.username });
+  res.redirect('/admin');
+});
+
+app.get('/admin/logout', (req, res) => { req.session.destroy(); res.redirect('/admin/login'); });
+app.get('/', (req, res) => { res.json({ status: 'OK', message: 'CryptoGPU Backend is running' }); });
+
+// ========== API ДЛЯ БОТА ==========
+app.post('/api/bot/registerRef', async (req, res) => {
+  const { userId, referrerId, name } = req.body;
+  try {
+    const existingUser = await User.findOne({ userId: userId });
+    if (existingUser) {
+      return res.json({ success: false, error: 'User already exists' });
+    }
+    const referrer = await User.findOne({ userId: referrerId });
+    if (!referrer) {
+      return res.json({ success: false, error: 'Referrer not found' });
+    }
+    const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === userId);
+    if (alreadyInvited) {
+      return res.json({ success: false, error: 'Already invited' });
+    }
+    const friendName = name || `User_${userId.slice(-5)}`;
+    referrer.invitedFriends.push({
+      friendId: userId,
+      friendName: friendName,
+      date: new Date().toLocaleDateString(),
+      earnedGpu: 0
+    });
+    referrer.friends = referrer.invitedFriends.length;
+    await referrer.save();
+    console.log(`✅ Реферал засчитан! ${referrerId} → ${userId} (${friendName})`);
+    res.json({ success: true, message: 'Referral counted' });
+  } catch (error) {
+    console.error('Error in /api/bot/registerRef:', error);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+app.get('/clearusers', async (req, res) => {
+  try {
+    const result = await User.deleteMany({});
+    res.send(`✅ Удалено пользователей: ${result.deletedCount}`);
+  } catch (error) {
+    res.send(`❌ Ошибка: ${error.message}`);
+  }
+});
+
+// ========== ИНДЕКСЫ MONGODB ==========
+mongoose.connection.once('open', async () => {
+  try {
+    await User.collection.createIndex({ userId: 1 });
+    await User.collection.createIndex({ "invitedFriends.friendId": 1 });
+    console.log('✅ Индексы MongoDB созданы');
+  } catch (err) {
+    console.error("Ошибка создания индексов:", err);
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+mongoose.connect(process.env.MONGODB_URL).then(async () => {
+  console.log('✅ Connected to MongoDB');
+  await ensureAdminExists();
+  app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}\n🔐 Admin: https://your-domain.up.railway.app/admin/login`));
+}).catch(err => { console.error('❌ MongoDB error:', err.message); process.exit(1); });
