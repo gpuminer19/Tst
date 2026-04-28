@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>CryptoGPU | Telegram Mining</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
@@ -13,6 +13,7 @@
     background: #0B0E1A; 
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; 
     color: #fff; 
+    padding-top: 180px; /* Отступ сверху для фиксированной шапки */
     padding-bottom: 80px;
   }
   
@@ -27,21 +28,27 @@
     z-index: -2; 
   }
   
-  /* ФИКС ШАПКИ — ОСНОВНОЕ РЕШЕНИЕ */
+  /* ФИКСИРОВАННАЯ ШАПКА — НЕ ПРОКРУЧИВАЕТСЯ */
   .header { 
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
     background: rgba(8, 12, 24, 0.95); 
     backdrop-filter: blur(20px); 
     border-bottom: 1px solid rgba(0, 212, 255, 0.3); 
     padding: 12px 16px 12px 16px; 
     border-radius: 0 0 24px 24px;
-    position: sticky;
     z-index: 100;
   }
   
-  /* Дополнительный отступ для iPhone с вырезом */
+  /* Для iPhone с вырезом */
   @supports (padding-top: env(safe-area-inset-top)) {
     .header {
-      padding-top: calc(90px + env(safe-area-inset-top));
+      padding-top: calc(80px + env(safe-area-inset-top));
+    }
+    body {
+      padding-top: calc(220px + env(safe-area-inset-top));
     }
   }
   
@@ -84,6 +91,7 @@
   .balance-label { font-size: 10px; color: #8EA3D4; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
   .balance-value span { font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #FFF, #A0C4FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
   
+  /* Убираем скругление у контента, который идёт после фиксированной шапки */
   .mining-panel { 
     background: linear-gradient(135deg, rgba(0, 40, 60, 0.5), rgba(0, 20, 40, 0.7)); 
     border-radius: 20px; 
@@ -129,7 +137,7 @@
   
   .bottom-nav { 
     position: fixed; 
-    bottom: 8px; 
+    bottom: 10px; 
     left: 8px; 
     right: 8px; 
     background: rgba(8, 12, 24, 0.95); 
@@ -144,7 +152,7 @@
   .nav-btn { background: transparent !important; box-shadow: none !important; width: auto !important; padding: 6px 14px !important; font-size: 18px !important; color: #5A6A8A !important; margin: 0 !important; }
   .nav-btn.active { color: #00D4FF !important; background: rgba(0, 212, 255, 0.15) !important; border-radius: 40px; }
   .tab { display: none; animation: fade 0.25s ease; }
-  .tab.active { display: block; padding-bottom: 70px; }
+  .tab.active { display: block; }
   
   @keyframes fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
   .loading { text-align: center; padding: 40px; color: #6B7CA8; }
