@@ -118,6 +118,48 @@
   
   .mining-indicator { display: inline-block; width: 8px; height: 8px; background: #00FFAA; border-radius: 50%; margin-right: 6px; animation: blink 1s infinite; }
   @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  
+  /* ========== КРАСИВЫЕ УВЕДОМЛЕНИЯ ========== */
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(10, 20, 30, 0.95);
+    backdrop-filter: blur(12px);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 60px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 1000;
+    opacity: 0;
+    transition: all 0.25s ease;
+    pointer-events: none;
+    border: 1px solid rgba(0, 212, 255, 0.4);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+  }
+  
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  
+  .toast-success {
+    border-color: #00FFAA;
+    background: rgba(0, 40, 20, 0.95);
+    color: #00FFAA;
+  }
+  
+  .toast-error {
+    border-color: #FF4444;
+    background: rgba(40, 0, 0, 0.95);
+    color: #FF8888;
+  }
 </style>
 </head>
 <body>
@@ -286,10 +328,25 @@
 
 <div id="loading" class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Загрузка данных...</div>
 
+<!-- КРАСИВЫЕ УВЕДОМЛЕНИЯ -->
+<div id="toast" class="toast"></div>
+
 <script>
 // ========== НАСТРОЙКИ ==========
 const API_URL = "https://tst-production-c55e.up.railway.app/api/tg";
 const BOT_USERNAME = "Minegpubot";
+
+// ========== КРАСИВЫЕ УВЕДОМЛЕНИЯ ==========
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = `toast toast-${type}`;
+  toast.classList.add('show');
+  
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 2000);
+}
 
 // ========== ДАННЫЕ МАЙНЕРОВ ==========
 const gpuTemplates = [
@@ -458,6 +515,7 @@ async function syncWithServer() {
     playerData.gpuTokens = result.data.gpu;
     playerData.friends = result.data.friends;
     playerData.invitedFriends = result.data.invitedFriends || [];
+    playerData.transactions = result.data.transactions || [];
     
     accumulatedTon = result.data.accumulatedTon || 0;
     accumulatedGpu = result.data.accumulatedGpu || 0;
@@ -471,6 +529,7 @@ async function syncWithServer() {
     }
     
     updateUI();
+    renderHistory();
     console.log(`🔄 Синхронизация: TON=${playerData.ton}, накопления=${accumulatedTon}`);
     return true;
   }
@@ -482,7 +541,7 @@ async function claimAccumulatedReward() {
   await syncWithServer();
   
   if (accumulatedTon === 0 && accumulatedGpu === 0) {
-    tg.showAlert("Накоплений пока нет! Купите майнеры и подождите.");
+    showToast("Накоплений пока нет! Купите майнеры и подождите.", 'error');
     return;
   }
   
@@ -500,9 +559,9 @@ async function claimAccumulatedReward() {
   
   if (saveResult?.success) {
     await syncWithServer();
-    tg.showAlert(`🎉 Вы собрали награду!`);
+    showToast("🎉 Награда собрана!", 'success');
   } else {
-    tg.showAlert("❌ Ошибка при сборе награды");
+    showToast("❌ Ошибка при сборе награды", 'error');
   }
 }
 
@@ -516,7 +575,7 @@ async function buyMiner(minerId) {
   const currentQty = minerQuantities[miner.id] || 0;
   
   if (miner.maxQuantity !== null && currentQty >= miner.maxQuantity) {
-    tg.showAlert(`❌ Вы можете купить не более ${miner.maxQuantity} шт. ${miner.name}`);
+    showToast(`❌ Вы можете купить не более ${miner.maxQuantity} шт. ${miner.name}`, 'error');
     return;
   }
   
@@ -525,20 +584,20 @@ async function buyMiner(minerId) {
       ? playerData.invitedFriends.filter(f => (f.earnedGpu || 0) >= miner.requiredEarned).length 
       : 0;
     if (activeCount < miner.requiredActive) {
-      tg.showAlert(`❌ Нужно ${miner.requiredActive} друзей, заработавших ${miner.requiredEarned} GPU`);
+      showToast(`❌ Нужно ${miner.requiredActive} друзей, заработавших ${miner.requiredEarned} GPU`, 'error');
       return;
     }
   }
   
   if (miner.priceCurrency === "gpu") {
     if (playerData.gpuTokens < miner.price) {
-      tg.showAlert(`❌ Недостаточно GPU. Нужно: ${miner.price} GPU`);
+      showToast(`❌ Недостаточно GPU. Нужно: ${miner.price} GPU`, 'error');
       return;
     }
     playerData.gpuTokens -= miner.price;
   } else if (miner.priceCurrency === "ton") {
     if (playerData.ton < miner.price) {
-      tg.showAlert(`❌ Недостаточно TON. Нужно: ${miner.price} TON`);
+      showToast(`❌ Недостаточно TON. Нужно: ${miner.price} TON`, 'error');
       return;
     }
     playerData.ton -= miner.price;
@@ -562,9 +621,9 @@ async function buyMiner(minerId) {
   if (saveResult?.success) {
     await syncWithServer();
     const limitText = miner.maxQuantity ? ` (${minerQuantities[miner.id]}/${miner.maxQuantity})` : '';
-    tg.showAlert(`✅ Вы купили ${miner.name}! Теперь у вас ${minerQuantities[miner.id]} шт.${limitText}`);
+    showToast(`✅ Вы купили ${miner.name}! Теперь у вас ${minerQuantities[miner.id]} шт.${limitText}`, 'success');
   } else {
-    tg.showAlert("❌ Ошибка при покупке");
+    showToast("❌ Ошибка при покупке", 'error');
   }
 }
 
@@ -643,7 +702,7 @@ async function apiRequest(action, additionalData = {}) {
       body: JSON.stringify({ action, user_id: userId.toString(), name: user?.first_name || "Игрок", ...additionalData })
     });
     const result = await response.json();
-    if (result.error === 'BANNED') { tg.showAlert(result.message || "❌ Аккаунт заблокирован"); return null; }
+    if (result.error === 'BANNED') { showToast(result.message || "❌ Аккаунт заблокирован", 'error'); return null; }
     return result;
   } catch (error) { console.error(error); return null; }
 }
@@ -703,18 +762,18 @@ async function createDeposit(amount) {
 }
 
 async function createWithdraw(amount, wallet) {
-  if (amount < 1) { tg.showAlert("Минимальная сумма вывода: 1 TON"); return false; }
-  if (!wallet || wallet.length < 10) { tg.showAlert("Введите корректный TON-кошелёк"); return false; }
-  if (playerData.ton < amount) { tg.showAlert("Недостаточно TON на балансе"); return false; }
+  if (amount < 1) { showToast("Минимальная сумма вывода: 1 TON", 'error'); return false; }
+  if (!wallet || wallet.length < 10) { showToast("Введите корректный TON-кошелёк", 'error'); return false; }
+  if (playerData.ton < amount) { showToast("Недостаточно TON на балансе", 'error'); return false; }
   const result = await apiRequest("createWithdraw", { amount, tonWallet: wallet });
   if (result?.success) {
     document.getElementById("withdrawAmount").value = "";
     document.getElementById("withdrawWallet").value = "";
     await syncWithServer();
-    tg.showAlert("Заявка на вывод создана! Ожидайте подтверждения.");
+    showToast("Заявка на вывод создана! Ожидайте подтверждения.", 'success');
     return true;
   }
-  tg.showAlert(result?.error || "Ошибка при создании заявки");
+  showToast(result?.error || "Ошибка при создании заявки", 'error');
   return false;
 }
 
@@ -769,7 +828,7 @@ function initExchange() {
     const amount = parseFloat(document.getElementById("sellGpuAmount").value);
     if (isNaN(amount) || amount <= 0) return;
     if (playerData.gpuTokens < amount) { 
-      tg.showAlert("Недостаточно GPU"); 
+      showToast("Недостаточно GPU", 'error');
       return; 
     }
     
@@ -790,9 +849,9 @@ function initExchange() {
     if (saveResult?.success) {
       await syncWithServer();
       document.getElementById("sellGpuAmount").value = "";
-      tg.showAlert(`✅ Продано ${amount} GPU за ${tonReceived.toFixed(4)} TON`);
+      showToast(`✅ Продано ${amount} GPU за ${tonReceived.toFixed(4)} TON`, 'success');
     } else {
-      tg.showAlert("❌ Ошибка при продаже");
+      showToast("❌ Ошибка при продаже", 'error');
     }
   };
 }
@@ -809,7 +868,10 @@ window.openTab = async function(id, btn) {
   if (id === "tasks") { await loadTasksGame(); }
 };
 
-function copyText(text) { navigator.clipboard.writeText(text); }
+function copyText(text) { 
+  navigator.clipboard.writeText(text);
+  showToast("Скопировано!", 'success');
+}
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
@@ -849,7 +911,10 @@ async function init() {
   
   document.getElementById("payBtn").onclick = async () => {
     const amount = parseFloat(document.getElementById("depositAmount").value);
-    if (isNaN(amount) || amount < 0.1) { tg.showAlert("Введите сумму от 0.1 TON"); return; }
+    if (isNaN(amount) || amount < 0.1) { 
+      showToast("Введите сумму от 0.1 TON", 'error'); 
+      return; 
+    }
     const depositData = await createDeposit(amount);
     if (depositData) {
       document.getElementById("paymentAmount").innerHTML = `${depositData.amount} <img src="ton.png" class="icon-img-small">`;
@@ -863,7 +928,7 @@ async function init() {
     document.getElementById("depositForm").style.display = "block";
     document.getElementById("depositAmount").value = "";
     await syncWithServer();
-    tg.showAlert("Спасибо! Ожидайте зачисления в ближайшее время.");
+    showToast("Спасибо! Ожидайте зачисления в ближайшее время.", 'success');
   };
   document.getElementById("cancelPayBtn").onclick = () => {
     document.getElementById("depositConfirm").style.display = "none";
@@ -876,7 +941,7 @@ async function init() {
   };
   document.getElementById("copyRefBtn").onclick = () => {
     navigator.clipboard.writeText(document.getElementById("refLink").innerText);
-    tg.showAlert("Реферальная ссылка скопирована!");
+    showToast("Реферальная ссылка скопирована!", 'success');
   };
   
   document.getElementById("loading").style.display = "none";
