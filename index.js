@@ -12,6 +12,19 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ========== ЗАЩИТА ОТ ФЛУДА ==========
+const requestLimits = new Map();
+
+function checkRateLimit(userId, limitMs = 1000) {
+  const now = Date.now();
+  const userLimit = requestLimits.get(userId);
+  if (userLimit && (now - userLimit.lastRequestTime) < limitMs) {
+    return false;
+  }
+  requestLimits.set(userId, { lastRequestTime: now });
+  return true;
+}
+
 // ========== TELEGRAM УВЕДОМЛЕНИЯ ==========
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
@@ -127,6 +140,26 @@ const RATES = {
   nexus: { ton: 1.5 / 24, gpu: 200 / 24 }
 };
 
+// ЦЕНЫ МАЙНЕРОВ
+const MINER_PRICES = {
+  basic: { ton: 0, gpu: 1 },
+  normal: { ton: 2, gpu: 0 },
+  pro: { ton: 10, gpu: 0 },
+  ultra: { ton: 50, gpu: 0 },
+  legendary: { ton: 100, gpu: 0 },
+  minex: { ton: 500, gpu: 0 }
+};
+
+// ЛИМИТЫ МАЙНЕРОВ
+const MINER_LIMITS = {
+  basic: 30,
+  normal: null,
+  pro: null,
+  ultra: null,
+  legendary: null,
+  minex: null
+};
+
 // ========== ФУНКЦИЯ ОФЛАЙН-НАКОПЛЕНИЙ ==========
 async function calculateOffline(userId) {
   const user = await User.findOne({ userId });
@@ -159,6 +192,8 @@ async function calculateOffline(userId) {
   }
   user.lastMiningUpdate = now;
   await user.save();
+  
+  console.log(`📊 ${userId}: офлайн-накоплено +${earnedTon.toFixed(8)} TON, +${earnedGpu.toFixed(6)} GPU за ${hoursPassed.toFixed(4)}ч`);
 }
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
@@ -170,6 +205,7 @@ async function addEarnedGpuToReferrer(userId, earnedGpu) {
     if (friend) {
       friend.earnedGpu = (friend.earnedGpu || 0) + earnedGpu;
       await referrer.save();
+      console.log(`👥 Рефереру ${referrer.userId} начислено +${earnedGpu} GPU за активность друга`);
     }
   }
 }
@@ -230,7 +266,6 @@ app.post('/telegram/webhook', async (req, res) => {
     }
   }
   
-  // ========== ОБРАБОТКА ЗАДАНИЙ ==========
   if (type === 'task') {
     if (action === 'approve') {
       const userTask = await UserTask.findById(id);
@@ -263,7 +298,7 @@ app.post('/telegram/webhook', async (req, res) => {
 
 // ========== API ==========
 app.post('/api/tg', async (req, res) => {
-  const { action, user_id, name, referrer_id, ton, gpu, friends, accumulatedTon, accumulatedGpu, minerQuantities, amount, tonWallet, taskId, deposit_id } = req.body;
+  const { action, user_id, name, referrer_id, ton, gpu, friends, accumulatedTon, accumulatedGpu, minerQuantities, amount, tonWallet, taskId, deposit_id, minerId, quantity } = req.body;
 
   try {
     const banned = await User.findOne({ userId: user_id, isBanned: true });
@@ -290,17 +325,20 @@ app.post('/api/tg', async (req, res) => {
             });
             referrer.friends = referrer.invitedFriends.length;
             await referrer.save();
+            console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
           }
         }
         await user.save();
+        console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
         
-        // Уведомление о новом игроке
         await sendTelegramNotification(
           `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
         );
       } else {
+        console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
         await calculateOffline(user_id);
         user = await User.findOne({ userId: user_id });
+        console.log(`📊 Накопления после входа: TON=${user.accumulatedTon.toFixed(8)}, GPU=${user.accumulatedGpu.toFixed(6)}`);
       }
       
       const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
@@ -320,27 +358,124 @@ app.post('/api/tg', async (req, res) => {
       });
     }
 
-    // СОХРАНЕНИЕ
+    // СОХРАНЕНИЕ (только для сбора награды и банальных обновлений)
     if (action === 'save') {
       const existingUser = await User.findOne({ userId: user_id });
+      if (!existingUser) return res.json({ success: false, error: "User not found" });
       
-      if (existingUser && ton < existingUser.ton) {
-        return res.json({ success: false, error: "CONFLICT" });
+      // Обновляем только разрешённые поля
+      const updateData = {
+        friends: friends,
+        lastSeen: new Date()
+      };
+      
+      // Только если пришло minerQuantities (например, от админа)
+      if (minerQuantities && Object.keys(minerQuantities).length > 0) {
+        updateData.minerQuantities = minerQuantities;
       }
       
-      const oldUser = existingUser;
-      const oldGpu = oldUser?.gpu || 0;
-
       await User.findOneAndUpdate(
         { userId: user_id },
-        { ton, gpu, friends, accumulatedTon, accumulatedGpu, minerQuantities, lastSeen: new Date() },
-        { upsert: true }
+        updateData,
+        { upsert: false }
       );
-
-      const earnedGpu = gpu - oldGpu;
-      if (earnedGpu > 0) await addEarnedGpuToReferrer(user_id, earnedGpu);
       
+      console.log(`💾 Сохранено состояние для ${user_id}`);
       return res.json({ success: true });
+    }
+
+    // СБОР НАКОПЛЕННОЙ НАГРАДЫ (НА СЕРВЕРЕ)
+    if (action === 'claim') {
+      if (!checkRateLimit(user_id)) {
+        return res.json({ success: false, error: "TOO_FAST" });
+      }
+      
+      await calculateOffline(user_id);
+      
+      const user = await User.findOne({ userId: user_id });
+      if (!user) return res.json({ success: false, error: "User not found" });
+      
+      const rewardTon = user.accumulatedTon || 0;
+      const rewardGpu = user.accumulatedGpu || 0;
+      
+      if (rewardTon === 0 && rewardGpu === 0) {
+        return res.json({ success: false, error: "NOTHING_TO_CLAIM" });
+      }
+      
+      user.ton += rewardTon;
+      user.gpu += rewardGpu;
+      user.accumulatedTon = 0;
+      user.accumulatedGpu = 0;
+      await user.save();
+      
+      if (rewardGpu > 0) {
+        await addEarnedGpuToReferrer(user_id, rewardGpu);
+      }
+      
+      console.log(`🎁 ${user_id}: собрал награду +${rewardTon.toFixed(8)} TON, +${rewardGpu.toFixed(6)} GPU`);
+      
+      return res.json({ 
+        success: true, 
+        data: {
+          ton: user.ton,
+          gpu: user.gpu,
+          accumulatedTon: 0,
+          accumulatedGpu: 0
+        }
+      });
+    }
+
+    // ПОКУПКА МАЙНЕРА (НА СЕРВЕРЕ)
+    if (action === 'buy') {
+      if (!checkRateLimit(user_id)) {
+        return res.json({ success: false, error: "TOO_FAST" });
+      }
+      
+      const price = MINER_PRICES[minerId];
+      const limit = MINER_LIMITS[minerId];
+      
+      if (!price) {
+        return res.json({ success: false, error: "INVALID_MINER" });
+      }
+      
+      const user = await User.findOne({ userId: user_id });
+      if (!user) return res.json({ success: false, error: "User not found" });
+      
+      const currentQty = user.minerQuantities?.[minerId] || 0;
+      const buyQuantity = quantity || 1;
+      
+      if (limit !== null && currentQty + buyQuantity > limit) {
+        return res.json({ success: false, error: "LIMIT_REACHED" });
+      }
+      
+      const totalTonPrice = price.ton * buyQuantity;
+      const totalGpuPrice = price.gpu * buyQuantity;
+      
+      if (totalTonPrice > 0 && user.ton < totalTonPrice) {
+        return res.json({ success: false, error: "INSUFFICIENT_TON" });
+      }
+      
+      if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) {
+        return res.json({ success: false, error: "INSUFFICIENT_GPU" });
+      }
+      
+      if (totalTonPrice > 0) user.ton -= totalTonPrice;
+      if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
+      
+      user.minerQuantities = user.minerQuantities || {};
+      user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
+      await user.save();
+      
+      console.log(`⛏️ ${user_id}: купил ${buyQuantity} x ${minerId} за ${totalTonPrice} TON, ${totalGpuPrice} GPU`);
+      
+      return res.json({ 
+        success: true, 
+        data: {
+          ton: user.ton,
+          gpu: user.gpu,
+          minerQuantities: user.minerQuantities
+        }
+      });
     }
 
     // РЕФЕРАЛЫ
@@ -356,7 +491,6 @@ app.post('/api/tg', async (req, res) => {
       const deposit = new Deposit({ userId: user_id, userName: name, amount, wallet: process.env.TON_WALLET, comment: `DEPOSIT_${user_id}_${Date.now()}`, type: 'deposit' });
       await deposit.save();
       
-      // Уведомление о заявке на пополнение
       await sendTelegramNotification(
         `💎 <b>Заявка на пополнение!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON`,
         [[
@@ -398,7 +532,6 @@ app.post('/api/tg', async (req, res) => {
       const withdraw = new Deposit({ userId: user_id, userName: name, amount, wallet: tonWallet, comment: `WITHDRAW_${user_id}_${Date.now()}`, type: 'withdraw' });
       await withdraw.save();
       
-      // Уведомление о заявке на вывод
       await sendTelegramNotification(
         `📤 <b>Заявка на вывод!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON\nКошелёк: <code>${tonWallet}</code>`,
         [[
@@ -439,7 +572,6 @@ app.post('/api/tg', async (req, res) => {
       const userTask = new UserTask({ userId: user_id, taskId, completedAt: new Date(), claimed: false });
       await userTask.save();
       
-      // Уведомление о выполненном задании
       const user = await User.findOne({ userId: user_id });
       await sendTelegramNotification(
         `📋 <b>Новое выполненное задание!</b>\n` +
@@ -646,7 +778,6 @@ const PORT = process.env.PORT || 8080;
 mongoose.connect(process.env.MONGODB_URL).then(async () => {
   console.log('✅ Connected to MongoDB');
   
-  // ========== НАСТРОЙКА СЕССИЙ ПОСЛЕ ПОДКЛЮЧЕНИЯ ==========
   app.use(session({
     secret: process.env.SESSION_SECRET || 'secret123',
     resave: false,
@@ -657,7 +788,6 @@ mongoose.connect(process.env.MONGODB_URL).then(async () => {
   
   await ensureAdminExists();
   
-  // Настройка вебхука для Telegram
   if (TELEGRAM_BOT_TOKEN) {
     try {
       await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://tst-production-c55e.up.railway.app/telegram/webhook`);
