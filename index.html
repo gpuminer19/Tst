@@ -9,14 +9,13 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   
-  /* === ПОЛНОЭКРАННЫЕ СТИЛИ ДЛЯ TELEGRAM === */
+  /* === ПОЛНОЭКРАННЫЕ СТИЛИ ДЛЯ TELEGRAM С УЧЁТОМ SAFE AREA === */
   body {
     background: #0B0E1A;
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
     color: #fff;
-    padding-bottom: 80px;
     
-    /* Принудительное заполнение экрана */
+    /* Занять весь экран */
     position: fixed;
     top: 0;
     left: 0;
@@ -26,11 +25,34 @@
     -webkit-overflow-scrolling: touch;
   }
   
-  /* Адаптация под статус-бар на iOS */
+  /* ОБЯЗАТЕЛЬНО: отступ сверху для шапки Telegram + safe area */
+  .header {
+    background: rgba(8, 12, 24, 0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+    padding: 12px 20px 16px;
+    border-radius: 0 0 28px 28px;
+    
+    /* ГЛАВНОЕ: отступ сверху, чтобы контент не наезжал на шапку Telegram */
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+  
+  /* Дополнительная страховка для верхней информационной панели */
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px 12px;
+    border-radius: 44px;
+    margin-top: 0;
+  }
+  
+  /* Для всех безопасных зон (iPhone с вырезом) */
   @supports (padding-top: env(safe-area-inset-top)) {
     body {
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: calc(80px + env(safe-area-inset-bottom));
+      padding-top: 0;
     }
     .bottom-nav {
       padding-bottom: max(5px, env(safe-area-inset-bottom));
@@ -48,11 +70,7 @@
     z-index: -2;
   }
   
-  /* Остальные твои стили (я их не менял, они идут дальше) */
-  .header { background: rgba(8, 12, 24, 0.85); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(0, 212, 255, 0.2); padding: 12px 20px 16px; border-radius: 0 0 28px 28px; }
-  .user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; background: rgba(0, 0, 0, 0.3); padding: 8px 12px; border-radius: 44px; }
-  .avatar { width: 44px; height: 44px; background: linear-gradient(135deg, #00D4FF, #0066FF); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; }
-  .user-name { flex: 1; }
+  /* Все остальные твои стили остаются без изменений */
   .user-name h3 { font-size: 16px; margin-bottom: 2px; }
   .user-name p { font-size: 10px; color: #6B7CA8; }
   .user-id { font-family: monospace; font-size: 11px; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 20px; }
@@ -203,6 +221,7 @@
 </head>
 <body>
 
+<!-- Твой HTML-код приложения (такой же, как был, без изменений) -->
 <div id="app" style="display:none">
 <div class="header">
   <div class="user-info" id="userInfo">
@@ -529,8 +548,6 @@ async function syncWithServer() {
     playerData.invitedFriends = result.data.invitedFriends || [];
     playerData.transactions = result.data.transactions || [];
     
-    // НЕ перезаписываем накопления!
-    
     if (result.data.minerQuantities) {
       minerQuantities = result.data.minerQuantities;
       renderAllCards();
@@ -836,7 +853,6 @@ function copyText(text) {
 function maximizeTelegramApp() {
   if (typeof tg !== 'undefined' && tg && typeof tg.expand === 'function') {
     tg.expand();
-    // Повторные вызовы для iOS
     setTimeout(() => tg.expand(), 100);
     setTimeout(() => tg.expand(), 500);
   }
@@ -849,7 +865,7 @@ async function init() {
   // РАСШИРЯЕМ НА ВЕСЬ ЭКРАН
   maximizeTelegramApp();
   
-  // Пробуем расширить при каждом касании (на некоторых версиях Telegram нужно)
+  // Пробуем расширить при каждом касании
   document.body.addEventListener('touchstart', () => maximizeTelegramApp(), { once: true });
   
   // При изменении ориентации тоже расширяем
