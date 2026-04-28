@@ -363,13 +363,11 @@ app.post('/api/tg', async (req, res) => {
       const existingUser = await User.findOne({ userId: user_id });
       if (!existingUser) return res.json({ success: false, error: "User not found" });
       
-      // Обновляем только разрешённые поля
       const updateData = {
         friends: friends,
         lastSeen: new Date()
       };
       
-      // Только если пришло minerQuantities (например, от админа)
       if (minerQuantities && Object.keys(minerQuantities).length > 0) {
         updateData.minerQuantities = minerQuantities;
       }
@@ -384,7 +382,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true });
     }
 
-    // СБОР НАКОПЛЕННОЙ НАГРАДЫ (НА СЕРВЕРЕ)
+    // СБОР НАКОПЛЕННОЙ НАГРАДЫ
     if (action === 'claim') {
       if (!checkRateLimit(user_id)) {
         return res.json({ success: false, error: "TOO_FAST" });
@@ -425,7 +423,7 @@ app.post('/api/tg', async (req, res) => {
       });
     }
 
-    // ПОКУПКА МАЙНЕРА (НА СЕРВЕРЕ)
+    // ПОКУПКА МАЙНЕРА
     if (action === 'buy') {
       if (!checkRateLimit(user_id)) {
         return res.json({ success: false, error: "TOO_FAST" });
@@ -459,14 +457,27 @@ app.post('/api/tg', async (req, res) => {
         return res.json({ success: false, error: "INSUFFICIENT_GPU" });
       }
       
+      // Списываем цену
       if (totalTonPrice > 0) user.ton -= totalTonPrice;
       if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
       
+      // Добавляем майнера
       user.minerQuantities = user.minerQuantities || {};
       user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
-      await user.save();
       
-      console.log(`⛏️ ${user_id}: купил ${buyQuantity} x ${minerId} за ${totalTonPrice} TON, ${totalGpuPrice} GPU`);
+      // Сохраняем
+      await User.updateOne(
+        { userId: user_id },
+        { 
+          $set: { 
+            minerQuantities: user.minerQuantities,
+            ton: user.ton,
+            gpu: user.gpu
+          } 
+        }
+      );
+      
+      console.log(`⛏️ ${user_id}: купил ${buyQuantity} x ${minerId} за ${totalTonPrice} TON, ${totalGpuPrice} GPU. Теперь: ${user.minerQuantities[minerId]} шт.`);
       
       return res.json({ 
         success: true, 
