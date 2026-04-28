@@ -1007,12 +1007,18 @@ function copyText(text) {
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
-  tg.ready();
-  tg.expand();
+  let tg = window.Telegram.WebApp;
   
-  setTimeout(() => {
-    tg.expand();
-  }, 100);
+  tg.expand();
+  tg.ready();
+  
+  setTimeout(() => { tg.expand(); }, 100);
+  setTimeout(() => { tg.expand(); }, 500);
+  
+  document.body.style.backgroundColor = tg.themeParams.bg_color || '#0B0E1A';
+  document.body.style.overflow = 'hidden';
+  document.documentElement.style.overflow = 'hidden';
+  document.body.classList.add('tg-fullscreen');
   
   if (user) {
     document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
@@ -1035,7 +1041,6 @@ async function init() {
   initMinerQuantities();
   initGrid();
   
-  // Загружаем данные игры
   await loadUserData(referrerId);
   updateRefLink();
   await loadReferrals();
@@ -1082,10 +1087,8 @@ async function init() {
     showToast("Ссылка скопирована!", 'success');
   };
   
-  // Запускаем визуальную анимацию загрузки
   await simulateLoading();
 
-  // Плавно скрываем экран загрузки и показываем игру
   const loadingElement = document.getElementById("loading");
   loadingElement.style.transition = "opacity 0.5s ease";
   loadingElement.style.opacity = "0";
@@ -1095,7 +1098,6 @@ async function init() {
       document.getElementById("app").style.display = "block";
   }, 500);
 }
-
 init();
 </script>
 </body>
