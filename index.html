@@ -164,6 +164,20 @@
 </head>
 <body>
 
+<!-- ========== ДОБАВЛЕНО: ПОЛНОЭКРАННЫЙ РЕЖИМ TELEGRAM MINI APP ========== -->
+<script>
+  (function() {
+    if (window.Telegram && window.Telegram.WebApp) {
+      const tg = window.Telegram.WebApp;
+      tg.expand();                    // Растягиваем на весь экран (убирает шапку)
+      tg.setHeaderColor('bg_color');  // Шапка становится прозрачной
+      tg.ready();
+      console.log('✅ Telegram Mini App: полноэкранный режим включён');
+    }
+  })();
+</script>
+<!-- ========== КОНЕЦ ДОБАВЛЕННОГО БЛОКА ========== -->
+
 <div id="app" style="display:none">
 <div class="header">
   <div class="user-info" id="userInfo">
