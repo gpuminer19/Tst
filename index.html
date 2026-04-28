@@ -778,15 +778,14 @@ function initExchange() {
 }
 
 // ========== НАВИГАЦИЯ ==========
-window.openTab = async function(id, btn) {
-  await syncWithServer();
+window.openTab = function(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
-  if (id === "referral") { await loadReferrals(); updateRefLink(); }
+  if (id === "referral") { loadReferrals(); updateRefLink(); }
   if (id === "wallet") { renderHistory(); }
-  if (id === "tasks") { await loadTasksGame(); }
+  if (id === "tasks") { loadTasksGame(); }
 };
 
 function copyText(text) { 
