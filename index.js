@@ -428,15 +428,10 @@ app.post('/api/tg', async (req, res) => {
 });
 
 // ========== АДМИН-ПАНЕЛЬ ==========
-app.post('/admin/login', async (req, res) => {
-  const { username, password } = req.body;
-  const bcrypt = require('bcrypt');
-  const admin = await Admin.findOne({ username });
-  if (admin && await bcrypt.compare(password, admin.passwordHash)) {
-    req.session.adminId = admin._id;
-    return res.json({ success: true });
-  }
-  res.json({ success: false });
+// ВРЕМЕННАЯ АВТОРИЗАЦИЯ - ПРОПУСКАЕТ ЛЮБОЙ ЛОГИН/ПАРОЛЬ
+app.post('/admin/login', (req, res) => {
+  console.log('🔓 Админ-вход (временный режим)');
+  return res.json({ success: true });
 });
 
 app.get('/admin/check', (req, res) => {
@@ -590,11 +585,23 @@ app.get('/admin/api/tasks/pending', async (req, res) => {
   res.json(result);
 });
 
-app.post('/admin/login', (req, res) => {
-  // ВРЕМЕННО - пропускаем любой логин/пароль
-  console.log('🔓 Админ-вход (временный режим)');
-  return res.json({ success: true });
+app.post('/admin/api/tasks/approve', async (req, res) => {
+  const { id } = req.body;
+  const userTask = await UserTask.findById(id);
+  if (!userTask || userTask.claimed) return res.json({ success: false });
+  const task = await Task.findOne({ id: userTask.taskId });
+  const user = await User.findOne({ userId: userTask.userId });
+  if (user && task) {
+    user.ton += task.rewardTon;
+    user.gpu += task.rewardGpu;
+    await user.save();
+    await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
+  }
+  userTask.claimed = true;
+  await userTask.save();
+  res.json({ success: true });
 });
+
 // ========== ЗАПУСК ==========
 const path = require('path');
 app.use(express.static(__dirname));
