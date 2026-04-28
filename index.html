@@ -796,8 +796,18 @@ function copyText(text) {
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
-  tg.ready(); 
+  tg.ready();
+
+// Полноэкранный режим
+tg.expand();
+setTimeout(() => {
   tg.expand();
+  document.body.style.height = window.innerHeight + 'px';
+}, 100);
+window.addEventListener('resize', () => {
+  tg.expand();
+  document.body.style.height = window.innerHeight + 'px';
+});
   
   // Фикс для полноэкранного режима
   document.body.style.height = window.innerHeight + 'px';
