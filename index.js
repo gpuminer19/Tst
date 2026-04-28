@@ -230,6 +230,27 @@ app.post('/telegram/webhook', async (req, res) => {
     }
   }
   
+  // ========== ОБРАБОТКА ЗАДАНИЙ ==========
+  if (type === 'task') {
+    if (action === 'approve') {
+      const userTask = await UserTask.findById(id);
+      if (userTask && !userTask.claimed) {
+        const task = await Task.findOne({ id: userTask.taskId });
+        const user = await User.findOne({ userId: userTask.userId });
+        if (user && task) {
+          user.ton += task.rewardTon;
+          user.gpu += task.rewardGpu;
+          await user.save();
+          await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
+        }
+        userTask.claimed = true;
+        await userTask.save();
+      }
+    } else if (action === 'reject') {
+      await UserTask.findByIdAndDelete(id);
+    }
+  }
+  
   await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
     chat_id: message.chat.id,
     message_id: message.message_id,
@@ -417,6 +438,20 @@ app.post('/api/tg', async (req, res) => {
       if (pending) return res.json({ success: false });
       const userTask = new UserTask({ userId: user_id, taskId, completedAt: new Date(), claimed: false });
       await userTask.save();
+      
+      // Уведомление о выполненном задании
+      const user = await User.findOne({ userId: user_id });
+      await sendTelegramNotification(
+        `📋 <b>Новое выполненное задание!</b>\n` +
+        `👤 Пользователь: <code>${user_id}</code> (${user?.name || 'Игрок'})\n` +
+        `📌 Задание: ${task.title}\n` +
+        `🎁 Награда: +${task.rewardTon} TON, +${task.rewardGpu} GPU`,
+        [[
+          { text: "✅ Подтвердить", callback_data: `approve:task:${userTask._id}` },
+          { text: "❌ Отклонить", callback_data: `reject:task:${userTask._id}` }
+        ]]
+      );
+      
       return res.json({ success: true });
     }
 
