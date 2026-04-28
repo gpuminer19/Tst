@@ -12,15 +12,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ========== СЕССИИ ==========
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'secret123',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: process.env.MONGODB_URL }),
-  cookie: { maxAge: 24 * 60 * 60 * 1000 }
-}));
-
 // ========== TELEGRAM УВЕДОМЛЕНИЯ ==========
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
@@ -624,6 +615,16 @@ const PORT = process.env.PORT || 8080;
 
 mongoose.connect(process.env.MONGODB_URL).then(async () => {
   console.log('✅ Connected to MongoDB');
+  
+  // ========== НАСТРОЙКА СЕССИЙ ПОСЛЕ ПОДКЛЮЧЕНИЯ ==========
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'secret123',
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({ mongoUrl: process.env.MONGODB_URL }),
+    cookie: { maxAge: 24 * 60 * 60 * 1000 }
+  }));
+  
   await ensureAdminExists();
   
   // Настройка вебхука для Telegram
