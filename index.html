@@ -799,7 +799,7 @@ async function loadTasksGame() {
         buttonHtml = `<button class="task-btn" onclick="completeTask('${task.id}')">✅ Выполнить</button>`;
       }
       return `<div class="card task-card"><div class="card-info"><h3>${task.title}</h3><div class="task-desc">${task.description}</div><div class="rewards-info task-rewards">💰
-      +${task.rewardTon} <img src="ton.png" class="icon-img-small"> |  +${task.rewardGpu} <img src="gpu.png" class="icon-img-small"></div>${statusHtml}${buttonHtml}</div></div>`;
+      +${task.rewardTon} <img src="ton.png" class="icon-img-small"style="margin-left:-4px;> |  +${task.rewardGpu} <img src="gpu.png" class="icon-img-small"></div>${statusHtml}${buttonHtml}</div></div>`;
     }).join('');
   } else {
     container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">📭 Нет активных заданий</div>';
