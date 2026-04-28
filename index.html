@@ -7,13 +7,117 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
 <style>
+  /* ===== НОВЫЕ СТИЛИ ДЛЯ ЭКРАНА ЗАГРУЗКИ ===== */
+  /* Экран загрузки */
+  #loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('./load.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      z-index: 1000;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 80px;
+  }
+
+  /* Лёгкий оверлей */
+  #loading::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.1);
+      z-index: 1;
+  }
+
+  /* Контейнер для элементов загрузки */
+  .loading-content {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      width: 85%;
+      max-width: 300px;
+  }
+
+  /* Проценты */
+  .loading-percentage {
+      font-size: 2rem;
+      font-weight: 800;
+      font-family: 'SF Mono', monospace;
+      color: #00D4FF;
+      text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+      margin-bottom: 12px;
+  }
+
+  /* Прогресс-бар */
+  .loader-track {
+      width: 100%;
+      height: 4px;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 16px;
+  }
+
+  .loader-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #00D4FF, #00FFAA);
+      border-radius: 10px;
+      transition: width 0.2s linear;
+  }
+
+  /* Строка статуса */
+  .loading-status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 0.8rem;
+  }
+
+  /* Анимированные точки */
+  .status-dots span {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      background-color: #00D4FF;
+      border-radius: 50%;
+      margin: 0 2px;
+      animation: pulse 1.4s infinite ease-in-out;
+  }
+
+  .status-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .status-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes pulse {
+      0%, 100% { opacity: 0.2; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+  }
+
+  /* Адаптация для мобильных устройств */
+  @media (max-width: 480px) {
+      #loading { padding-bottom: 60px; }
+      .loading-percentage { font-size: 1.8rem; }
+  }
+
+  /* ===== ОСНОВНЫЕ СТИЛИ ИГРЫ ===== */
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   
   body { 
     background: #0B0E1A; 
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; 
     color: #fff; 
-    padding-top: 180px; /* Отступ сверху для фиксированной шапки */
+    padding-top: 180px;
     padding-bottom: 80px;
   }
   
@@ -28,7 +132,6 @@
     z-index: -2; 
   }
   
-  /* ФИКСИРОВАННАЯ ШАПКА — НЕ ПРОКРУЧИВАЕТСЯ */
   .header { 
     position: fixed;
     top: 0;
@@ -42,7 +145,6 @@
     z-index: 100;
   }
   
-  /* Для iPhone с вырезом */
   @supports (padding-top: env(safe-area-inset-top)) {
     .header {
       padding-top: calc(80px + env(safe-area-inset-top));
@@ -91,7 +193,6 @@
   .balance-label { font-size: 10px; color: #8EA3D4; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
   .balance-value span { font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #FFF, #A0C4FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
   
-  /* Убираем скругление у контента, который идёт после фиксированной шапки */
   .mining-panel { 
     background: linear-gradient(135deg, rgba(0, 40, 60, 0.5), rgba(0, 20, 40, 0.7)); 
     border-radius: 20px; 
@@ -155,7 +256,6 @@
   .tab.active { display: block; }
   
   @keyframes fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-  .loading { text-align: center; padding: 40px; color: #6B7CA8; }
   
   .deposit-box { margin: 12px; padding: 14px; border-radius: 20px; background: linear-gradient(135deg, #1A1F35, #11152A); border: 1px solid rgba(0, 212, 255, 0.3); }
   .deposit-box h3 { margin-bottom: 10px; font-size: 14px; display: flex; align-items: center; gap: 6px; }
@@ -225,6 +325,25 @@
 </head>
 <body>
 
+<!-- ЭКРАН ЗАГРУЗКИ -->
+<div id="loading">
+    <div class="loading-content">
+        <div class="loading-percentage" id="loadingPercentage">0%</div>
+        <div class="loader-track">
+            <div class="loader-fill" id="loaderFill"></div>
+        </div>
+        <div class="loading-status">
+            <span id="loadingStatusText">Подключение</span>
+            <div class="status-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ОСНОВНОЕ ПРИЛОЖЕНИЕ -->
 <div id="app" style="display:none">
 <div class="header">
   <div class="user-info" id="userInfo">
@@ -382,8 +501,6 @@
 </div>
 </div>
 
-<div id="loading" class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Загрузка данных...</div>
-
 <div id="toast" class="toast"></div>
 
 <script>
@@ -444,6 +561,11 @@ let minerQuantities = {};
 let accumulatedTon = 0;
 let accumulatedGpu = 0;
 let lastMiningTimestamp = Date.now();
+
+// ========== ДЛЯ НОВОЙ ЗАГРУЗКИ ==========
+const loadingPercentageEl = document.getElementById('loadingPercentage');
+const loaderFillEl = document.getElementById('loaderFill');
+const loadingStatusTextEl = document.getElementById('loadingStatusText');
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 function initMinerQuantities() {
@@ -836,6 +958,37 @@ function initExchange() {
   };
 }
 
+// ========== СИМУЛЯЦИЯ ЗАГРУЗКИ ==========
+async function simulateLoading() {
+    const steps = [
+        { text: 'Подключение', progress: 10 },
+        { text: 'Авторизация', progress: 30 },
+        { text: 'Загрузка профиля', progress: 50 },
+        { text: 'Синхронизация', progress: 70 },
+        { text: 'Активация', progress: 85 },
+        { text: 'Вход в игру', progress: 100 }
+    ];
+
+    for (const step of steps) {
+        loadingStatusTextEl.textContent = step.text;
+        const currentProgress = parseInt(loadingPercentageEl.textContent) || 0;
+        const targetProgress = step.progress;
+        const diff = targetProgress - currentProgress;
+        const stepsCount = 15;
+        const increment = diff / stepsCount;
+
+        for (let i = 0; i <= stepsCount; i++) {
+            let newProgress = currentProgress + increment * i;
+            if (newProgress > targetProgress) newProgress = targetProgress;
+            const roundedProgress = Math.floor(newProgress);
+            loadingPercentageEl.textContent = `${roundedProgress}%`;
+            loaderFillEl.style.width = `${newProgress}%`;
+            await new Promise(r => setTimeout(r, 25));
+        }
+        if (step.progress < 100) await new Promise(r => setTimeout(r, 300));
+    }
+}
+
 // ========== НАВИГАЦИЯ ==========
 window.openTab = function(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -854,11 +1007,9 @@ function copyText(text) {
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
-  // Расширение на весь экран
   tg.ready();
   tg.expand();
   
-  // Дополнительное расширение с задержкой
   setTimeout(() => {
     tg.expand();
   }, 100);
@@ -883,6 +1034,8 @@ async function init() {
   
   initMinerQuantities();
   initGrid();
+  
+  // Загружаем данные игры
   await loadUserData(referrerId);
   updateRefLink();
   await loadReferrals();
@@ -890,7 +1043,6 @@ async function init() {
   
   lastMiningTimestamp = Date.now();
   startClientMining();
-  
   setInterval(syncWithServer, 60000);
   
   document.getElementById("claimAllBtn").onclick = claimAccumulatedReward;
@@ -930,8 +1082,18 @@ async function init() {
     showToast("Ссылка скопирована!", 'success');
   };
   
-  document.getElementById("loading").style.display = "none";
-  document.getElementById("app").style.display = "block";
+  // Запускаем визуальную анимацию загрузки
+  await simulateLoading();
+
+  // Плавно скрываем экран загрузки и показываем игру
+  const loadingElement = document.getElementById("loading");
+  loadingElement.style.transition = "opacity 0.5s ease";
+  loadingElement.style.opacity = "0";
+
+  setTimeout(() => {
+      loadingElement.style.display = "none";
+      document.getElementById("app").style.display = "block";
+  }, 500);
 }
 
 init();
