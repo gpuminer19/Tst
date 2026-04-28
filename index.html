@@ -809,13 +809,22 @@ function copyText(text) {
 }
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
   tg.ready();
 
-tg.ready();
-tg.expand();
-tg.disableVerticalSwipes();
-  
+  // Полноэкранный режим и подгонка высоты
+  tg.expand();
+  const setHeight = () => {
+    document.body.style.minHeight = window.innerHeight + 'px';
+  };
+  setHeight();
+  window.addEventListener('resize', setHeight);
+  setTimeout(() => {
+    tg.expand();
+    setHeight();
+  }, 100);
+
   if (user) {
     document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
     if (user.username) document.getElementById("userStatus").innerHTML = `@${user.username}`;
