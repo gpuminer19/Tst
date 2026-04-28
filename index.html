@@ -1007,21 +1007,12 @@ function copyText(text) {
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
-  // Убеждаемся, что Telegram WebApp полностью загружен
-  if (window.Telegram && window.Telegram.WebApp) {
-    tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand(); // Разворачиваем на весь экран
-    tg.enableClosingConfirmation(); // Опционально: подтверждение при закрытии
-  }
+  tg.ready();
+  tg.expand();
   
-  // Дополнительная попытка расширения после рендеринга
   setTimeout(() => {
-    if (tg) tg.expand();
+    tg.expand();
   }, 100);
-  
-  // Остальной код...
-}
   
   if (user) {
     document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
