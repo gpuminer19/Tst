@@ -371,9 +371,6 @@ let tg = window.Telegram.WebApp;
 let user = tg.initDataUnsafe?.user;
 let userId = user?.id || "test_" + Math.floor(Math.random() * 10000);
 
-// Расширяем на максимальную высоту
-tg.expand();
-
 let playerData = {
   ton: 0,
   gpuTokens: 0,
