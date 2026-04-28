@@ -588,4 +588,225 @@ app.post('/api/tg', async (req, res) => {
         `📋 <b>Новое выполненное задание!</b>\n` +
         `👤 Пользователь: <code>${user_id}</code> (${user?.name || 'Игрок'})\n` +
         `📌 Задание: ${task.title}\n` +
-        `🎁 Награда: +${task.rewardTon} TON
+        `🎁 Награда: +${task.rewardTon} TON, +${task.rewardGpu} GPU`,
+        [[
+          { text: "✅ Подтвердить", callback_data: `approve:task:${userTask._id}` },
+          { text: "❌ Отклонить", callback_data: `reject:task:${userTask._id}` }
+        ]]
+      );
+      
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ success: false });
+  } catch (error) {
+    console.error('API Error:', error);
+    res.status(500).json({ success: false });
+  }
+});
+
+// ========== АДМИН-ПАНЕЛЬ ==========
+// ВРЕМЕННАЯ АВТОРИЗАЦИЯ - ПРОПУСКАЕТ ЛЮБОЙ ЛОГИН/ПАРОЛЬ
+app.post('/admin/login', (req, res) => {
+  console.log('🔓 Админ-вход (временный режим)');
+  return res.json({ success: true });
+});
+
+app.get('/admin/check', (req, res) => {
+  res.json({ loggedIn: true });
+});
+
+app.post('/admin/logout', (req, res) => {
+  req.session.destroy();
+  res.json({ success: true });
+});
+
+// API для админки
+app.get('/admin/api/users', async (req, res) => {
+  const users = await User.find().sort({ createdAt: -1 }).limit(100);
+  res.json(users);
+});
+
+app.get('/admin/api/users/search', async (req, res) => {
+  const { q } = req.query;
+  const users = await User.find({ $or: [{ userId: { $regex: q, $options: 'i' } }, { name: { $regex: q, $options: 'i' } }] }).limit(50);
+  res.json(users);
+});
+
+app.post('/admin/api/user/giveGpu', async (req, res) => {
+  const { userId, amount } = req.body;
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false });
+  user.gpu += amount;
+  await user.save();
+  await addEarnedGpuToReferrer(userId, amount);
+  res.json({ success: true });
+});
+
+app.post('/admin/api/user/giveTon', async (req, res) => {
+  const { userId, amount } = req.body;
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false });
+  user.ton += amount;
+  await user.save();
+  res.json({ success: true });
+});
+
+app.post('/admin/api/user/giveMiner', async (req, res) => {
+  const { userId, minerId, quantity } = req.body;
+  const user = await User.findOne({ userId });
+  if (!user) return res.json({ success: false });
+  user.minerQuantities = user.minerQuantities || {};
+  user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + quantity;
+  await user.save();
+  res.json({ success: true });
+});
+
+app.post('/admin/api/user/setBalance', async (req, res) => {
+  const { userId, ton, gpu } = req.body;
+  await User.findOneAndUpdate({ userId }, { ton, gpu });
+  res.json({ success: true });
+});
+
+app.post('/admin/api/user/ban', async (req, res) => {
+  const { userId, reason } = req.body;
+  await User.findOneAndUpdate({ userId }, { isBanned: true, banReason: reason });
+  res.json({ success: true });
+});
+
+app.post('/admin/api/user/unban', async (req, res) => {
+  const { userId } = req.body;
+  await User.findOneAndUpdate({ userId }, { isBanned: false, banReason: null });
+  res.json({ success: true });
+});
+
+// Заявки
+app.get('/admin/api/deposits/pending', async (req, res) => {
+  const deposits = await Deposit.find({ status: 'pending', type: 'deposit' }).sort('-createdAt');
+  res.json(deposits);
+});
+
+app.get('/admin/api/withdraws/pending', async (req, res) => {
+  const withdraws = await Deposit.find({ status: 'pending', type: 'withdraw' }).sort('-createdAt');
+  res.json(withdraws);
+});
+
+app.post('/admin/api/deposit/approve', async (req, res) => {
+  const { id } = req.body;
+  const deposit = await Deposit.findById(id);
+  if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
+  await User.updateOne({ userId: deposit.userId }, { $inc: { ton: deposit.amount } });
+  deposit.status = 'completed';
+  await deposit.save();
+  res.json({ success: true });
+});
+
+app.post('/admin/api/withdraw/approve', async (req, res) => {
+  const { id } = req.body;
+  const withdraw = await Deposit.findById(id);
+  if (!withdraw || withdraw.status !== 'pending') return res.json({ success: false });
+  withdraw.status = 'completed';
+  await withdraw.save();
+  res.json({ success: true });
+});
+
+app.post('/admin/api/withdraw/reject', async (req, res) => {
+  const { id } = req.body;
+  const withdraw = await Deposit.findById(id);
+  if (!withdraw || withdraw.status !== 'pending') return res.json({ success: false });
+  await User.updateOne({ userId: withdraw.userId }, { $inc: { ton: withdraw.amount } });
+  withdraw.status = 'cancelled';
+  await withdraw.save();
+  res.json({ success: true });
+});
+
+// Задания (админ)
+app.get('/admin/api/tasks', async (req, res) => {
+  const tasks = await Task.find().sort({ order: 1 });
+  res.json(tasks);
+});
+
+app.post('/admin/api/tasks/save', async (req, res) => {
+  const { id, title, description, rewardTon, rewardGpu, type, taskUrl, isDaily, order } = req.body;
+  await Task.findOneAndUpdate(
+    { id: id || `task_${Date.now()}` },
+    { title, description, rewardTon, rewardGpu, type, taskUrl, isDaily, order, isActive: true },
+    { upsert: true }
+  );
+  res.json({ success: true });
+});
+
+app.post('/admin/api/tasks/delete', async (req, res) => {
+  const { id } = req.body;
+  await Task.findOneAndDelete({ id });
+  res.json({ success: true });
+});
+
+// Задания на подтверждение
+app.get('/admin/api/tasks/pending', async (req, res) => {
+  const pending = await UserTask.find({ claimed: false });
+  const result = [];
+  for (const p of pending) {
+    const task = await Task.findOne({ id: p.taskId });
+    const user = await User.findOne({ userId: p.userId });
+    if (task && user) {
+      result.push({
+        id: p._id,
+        userId: p.userId,
+        userName: user.name,
+        taskTitle: task.title,
+        rewardTon: task.rewardTon,
+        rewardGpu: task.rewardGpu
+      });
+    }
+  }
+  res.json(result);
+});
+
+app.post('/admin/api/tasks/approve', async (req, res) => {
+  const { id } = req.body;
+  const userTask = await UserTask.findById(id);
+  if (!userTask || userTask.claimed) return res.json({ success: false });
+  const task = await Task.findOne({ id: userTask.taskId });
+  const user = await User.findOne({ userId: userTask.userId });
+  if (user && task) {
+    user.ton += task.rewardTon;
+    user.gpu += task.rewardGpu;
+    await user.save();
+    await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
+  }
+  userTask.claimed = true;
+  await userTask.save();
+  res.json({ success: true });
+});
+
+// ========== ЗАПУСК ==========
+const path = require('path');
+app.use(express.static(__dirname));
+
+const PORT = process.env.PORT || 8080;
+
+mongoose.connect(process.env.MONGODB_URL).then(async () => {
+  console.log('✅ Connected to MongoDB');
+  
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'secret123',
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({ mongoUrl: process.env.MONGODB_URL }),
+    cookie: { maxAge: 24 * 60 * 60 * 1000 }
+  }));
+  
+  await ensureAdminExists();
+  
+  if (TELEGRAM_BOT_TOKEN) {
+    try {
+      await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://tst-production-c55e.up.railway.app/telegram/webhook`);
+      console.log('✅ Telegram webhook set');
+    } catch (err) {
+      console.error('❌ Webhook error:', err.message);
+    }
+  }
+  
+  app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
+}).catch(err => console.error('❌ MongoDB error:', err));
