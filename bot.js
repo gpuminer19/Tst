@@ -4,10 +4,10 @@ const TelegramBot = require('node-telegram-bot-api');
 const TOKEN = '8663587522:AAEkCqnlOW3964GoFha7I8Smar9UFKbcBKA';
 
 // Адрес вашей игры на GitHub Pages
-const GAME_URL = 'https://tst-production-c55e.up.railway.app/api/tg';
+const GAME_URL = 'https://tst-production-c55e.up.railway.app';
 
 // API бэкенда для засчёта рефералов
-const API_URL = 'https://tst-production-c55e.up.railway.app/api/tg';
+const API_URL = 'https://tst-production-c55e.up.railway.app';
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
