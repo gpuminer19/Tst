@@ -12,6 +12,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ===== ДОБАВИТЬ ЭТОТ БЛОК =====
+app.use((req, res, next) => {
+    // Разрешаем Telegram встраивать приложение
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    // Отключаем кэширование, чтобы всегда загружалась свежая версия
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+});
+// ===== КОНЕЦ БЛОКА =====
+
 // ========== ЗАЩИТА ОТ ФЛУДА ==========
 const requestLimits = new Map();
 
