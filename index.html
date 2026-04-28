@@ -8,24 +8,9 @@
 <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-body {
-  background: #0B0E1A;
-  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-  color: #fff;
-}
-#app {
-  height: 100dvh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: calc(80px + env(safe-area-inset-bottom));
-}
+  body { background: #0B0E1A; font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; color: #fff; padding-bottom: 80px; }
+  body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 30% 40%, #121936 0%, #070A14 100%); z-index: -2; }
+  .header { background: rgba(8, 12, 24, 0.85); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(0, 212, 255, 0.2); padding: 12px 20px 16px; border-radius: 0 0 28px 28px; }
   .user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; background: rgba(0, 0, 0, 0.3); padding: 8px 12px; border-radius: 44px; }
   .avatar { width: 44px; height: 44px; background: linear-gradient(135deg, #00D4FF, #0066FF); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; }
   .user-name { flex: 1; }
@@ -39,7 +24,7 @@ body {
   .balance-value { display: flex; align-items: center; gap: 6px; }
   .balance-value span { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, #FFF, #A0C4FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
   
-  .mining-panel { background: linear-gradient(135deg, rgba(0, 40, 60, 0.5), rgba(0, 20, 40, 0.7)); border-radius: 24px; padding: 16px; margin: 16px 16px 0 16px; border: 1px solid rgba(0, 212, 255, 0.3); margin-top: calc(16px + env(safe-area-inset-top, 0px)); }
+  .mining-panel { background: linear-gradient(135deg, rgba(0, 40, 60, 0.5), rgba(0, 20, 40, 0.7)); border-radius: 24px; padding: 16px; margin: 16px 16px 0 16px; border: 1px solid rgba(0, 212, 255, 0.3); }
   .mining-title { font-size: 14px; font-weight: 700; color: #00D4FF; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .mining-stats { display: flex; gap: 12px; margin-bottom: 12px; }
   .mining-card { flex: 1; background: rgba(0, 0, 0, 0.3); border-radius: 16px; padding: 10px 12px; border: 1px solid rgba(0, 168, 107, 0.4); }
@@ -78,7 +63,7 @@ body {
   .ref-link-box span { font-size: 10px; font-family: monospace; color: #FFD699; word-break: break-all; }
   .copy-btn { width: auto; padding: 6px 14px; background: #FF8C00; margin: 0; border-radius: 40px; }
   
-  .bottom-nav { position: fixed; bottom: 10px; left: 10px; right: 10px; background: rgba(8, 12, 24, 0.95); backdrop-filter: blur(20px); border-radius: 44px; display: flex; justify-content: space-around; padding: 5px 8px; border: 1px solid rgba(0, 212, 255, 0.25); z-index: 100; margin-bottom: env(safe-area-inset-bottom, 5px); }
+  .bottom-nav { position: fixed; bottom: 10px; left: 10px; right: 10px; background: rgba(8, 12, 24, 0.95); backdrop-filter: blur(20px); border-radius: 44px; display: flex; justify-content: space-around; padding: 5px 8px; border: 1px solid rgba(0, 212, 255, 0.25); z-index: 100; }
   .nav-btn { background: transparent !important; box-shadow: none !important; width: auto !important; padding: 8px 16px !important; font-size: 20px !important; color: #5A6A8A !important; margin: 0 !important; }
   .nav-btn.active { color: #00D4FF !important; background: rgba(0, 212, 255, 0.15) !important; border-radius: 40px; }
   .tab { display: none; animation: fade 0.25s ease; }
@@ -809,22 +794,8 @@ function copyText(text) {
 }
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
-// ========== ИНИЦИАЛИЗАЦИЯ ==========
 async function init() {
-  tg.ready();
-
-  // Полноэкранный режим и подгонка высоты
-  tg.expand();
-  const setHeight = () => {
-    document.body.style.minHeight = window.innerHeight + 'px';
-  };
-  setHeight();
-  window.addEventListener('resize', setHeight);
-  setTimeout(() => {
-    tg.expand();
-    setHeight();
-  }, 100);
-
+  tg.ready(); tg.expand();
   if (user) {
     document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
     if (user.username) document.getElementById("userStatus").innerHTML = `@${user.username}`;
