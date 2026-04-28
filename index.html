@@ -1,100 +1,873 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-    <title>Telegram WebApp Test</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            background: #0B0E1A;
-            color: white;
-            font-family: system-ui, -apple-system, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-        }
-        .info {
-            background: rgba(0, 212, 255, 0.2);
-            padding: 20px;
-            border-radius: 20px;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        button {
-            background: #00D4FF;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 40px;
-            font-size: 18px;
-            font-weight: bold;
-            color: #0B0E1A;
-            margin-top: 20px;
-            cursor: pointer;
-        }
-        .status {
-            font-size: 24px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        .success { color: #00FFAA; }
-        .error { color: #FF4444; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CryptoGPU | Telegram Mining</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { background: #0B0E1A; font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; color: #fff; padding-bottom: 80px; }
+  body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 30% 40%, #121936 0%, #070A14 100%); z-index: -2; }
+  .header { background: rgba(8, 12, 24, 0.85); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(0, 212, 255, 0.2); padding: 12px 20px 16px; border-radius: 0 0 28px 28px; }
+  .user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; background: rgba(0, 0, 0, 0.3); padding: 8px 12px; border-radius: 44px; }
+  .avatar { width: 44px; height: 44px; background: linear-gradient(135deg, #00D4FF, #0066FF); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; }
+  .user-name { flex: 1; }
+  .user-name h3 { font-size: 16px; margin-bottom: 2px; }
+  .user-name p { font-size: 10px; color: #6B7CA8; }
+  .user-id { font-family: monospace; font-size: 11px; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 20px; }
+  
+  .balance-row { display: flex; gap: 12px; margin-bottom: 8px; }
+  .balance-card { flex: 1; background: linear-gradient(135deg, rgba(0, 50, 100, 0.4), rgba(0, 20, 50, 0.6)); border-radius: 20px; padding: 10px 14px; backdrop-filter: blur(10px); border: 1px solid rgba(0, 212, 255, 0.25); }
+  .balance-label { font-size: 10px; color: #8EA3D4; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+  .balance-value { display: flex; align-items: center; gap: 6px; }
+  .balance-value span { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, #FFF, #A0C4FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  
+  .mining-panel { background: linear-gradient(135deg, rgba(0, 40, 60, 0.5), rgba(0, 20, 40, 0.7)); border-radius: 24px; padding: 16px; margin: 16px 16px 0 16px; border: 1px solid rgba(0, 212, 255, 0.3); }
+  .mining-title { font-size: 14px; font-weight: 700; color: #00D4FF; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .mining-stats { display: flex; gap: 12px; margin-bottom: 12px; }
+  .mining-card { flex: 1; background: rgba(0, 0, 0, 0.3); border-radius: 16px; padding: 10px 12px; border: 1px solid rgba(0, 168, 107, 0.4); }
+  .mining-label { font-size: 9px; color: #00FFAA; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
+  .mining-value { font-size: 20px; font-weight: 800; color: #00FFAA; }
+  .mining-sub { font-size: 9px; color: #8EA3D4; margin-top: 2px; }
+  .claim-all-btn { background: linear-gradient(95deg, #008A5C, #00A86B); border: none; font-weight: 700; font-size: 14px; padding: 12px; border-radius: 40px; color: white; width: 100%; cursor: pointer; transition: all 0.15s; }
+  .claim-all-btn:active { transform: scale(0.98); }
+  
+  .grid { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: rgba(12, 18, 32, 0.75); backdrop-filter: blur(12px); border-radius: 24px; padding: 12px; display: flex; gap: 12px; align-items: center; border: 1px solid rgba(0, 212, 255, 0.2); }
+  .gpu-img { width: 85px; height: 85px; object-fit: contain; background: rgba(0, 0, 0, 0.4); border-radius: 18px; padding: 8px; }
+  .card-info { flex: 1; }
+  .card-info h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .quantity-badge { background: rgba(0, 212, 255, 0.3); padding: 2px 8px; border-radius: 20px; font-size: 11px; color: #00D4FF; }
+  .rewards-info { display: flex; gap: 10px; font-size: 10px; color: #A0B4E0; margin-bottom: 6px; flex-wrap: wrap; align-items: center; }
+  .rewards-info img { width: 12px; height: 12px; margin-left: 2px; }
+  .button-group { display: flex; gap: 8px; margin-top: 6px; }
+  button { background: linear-gradient(95deg, #1A2A5E, #0F1A3A); border: none; font-weight: 600; font-size: 12px; padding: 8px 12px; border-radius: 40px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.15s; flex: 1; }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.5; transform: none; cursor: not-allowed; }
+  .buy-btn { background: linear-gradient(95deg, #1A2A5E, #0F1A3A); }
+  .mining-rate { font-size: 9px; color: #FFB347; margin-top: 4px; }
+  .referral-badge { background: linear-gradient(95deg, #FF8C00, #FF6600); font-size: 8px; padding: 2px 6px; border-radius: 20px; color: white; }
+  .limit-badge { background: #DC2626; font-size: 8px; padding: 2px 6px; border-radius: 20px; color: white; }
+  
+  .ref-stats { background: linear-gradient(135deg, #1A1F35, #11152A); margin: 16px; padding: 16px; border-radius: 28px; text-align: center; border: 1px solid rgba(255, 180, 71, 0.3); }
+  .friend-count { font-size: 40px; font-weight: 800; background: linear-gradient(135deg, #FFB347, #FF8C00); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .friends-list { margin-top: 16px; max-height: 250px; overflow-y: auto; }
+  .friend-item { display: flex; align-items: center; padding: 10px 12px; background: rgba(0, 0, 0, 0.3); border-radius: 20px; margin-bottom: 8px; }
+  .friend-avatar { width: 32px; height: 32px; background: linear-gradient(135deg, #00D4FF, #0066FF); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+  .friend-name { font-weight: 500; font-size: 14px; flex: 1; }
+  .friend-earned { display: flex; align-items: center; gap: 4px; font-weight: bold; font-size: 14px; color: #00D4FF; }
+  .friend-earned img { width: 16px; height: 16px; }
+  .ref-link-box { background: rgba(0, 0, 0, 0.4); margin: 12px 16px; padding: 10px 14px; border-radius: 60px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ref-link-box span { font-size: 10px; font-family: monospace; color: #FFD699; word-break: break-all; }
+  .copy-btn { width: auto; padding: 6px 14px; background: #FF8C00; margin: 0; border-radius: 40px; }
+  
+  .bottom-nav { position: fixed; bottom: 10px; left: 10px; right: 10px; background: rgba(8, 12, 24, 0.95); backdrop-filter: blur(20px); border-radius: 44px; display: flex; justify-content: space-around; padding: 5px 8px; border: 1px solid rgba(0, 212, 255, 0.25); z-index: 100; }
+  .nav-btn { background: transparent !important; box-shadow: none !important; width: auto !important; padding: 8px 16px !important; font-size: 20px !important; color: #5A6A8A !important; margin: 0 !important; }
+  .nav-btn.active { color: #00D4FF !important; background: rgba(0, 212, 255, 0.15) !important; border-radius: 40px; }
+  .tab { display: none; animation: fade 0.25s ease; }
+  .tab.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .loading { text-align: center; padding: 40px; color: #6B7CA8; }
+  
+  .deposit-box { margin: 16px; padding: 18px; border-radius: 24px; background: linear-gradient(135deg, #1A1F35, #11152A); border: 1px solid rgba(0, 212, 255, 0.3); }
+  .deposit-box h3 { margin-bottom: 12px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .deposit-box label { display: block; font-size: 11px; color: #8EA3D4; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .deposit-box input, .deposit-box textarea { width: 100%; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 12px; padding: 12px; font-size: 14px; outline: none; margin-bottom: 10px; }
+  .deposit-box textarea { resize: none; font-family: monospace; }
+  .deposit-box input:focus, .deposit-box textarea:focus { border-color: #00D4FF; }
+  .deposit-box .pay-btn { margin-top: 5px; background: linear-gradient(95deg, #00D4FF, #0066FF); color: #0B0E1A; border-radius: 40px; }
+  .withdraw-btn { background: linear-gradient(95deg, #FF8C00, #FF6600); border-radius: 40px; }
+  .history-list { max-height: 400px; overflow-y: auto; }
+  .history-item { background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .history-info { flex: 1; }
+  .history-amount { font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 4px; }
+  .history-amount img { width: 14px; height: 14px; }
+  .history-date { font-size: 10px; color: #6B7CA8; }
+  .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; }
+  .status-pending { background: #FF8C00; color: #0B0E1A; }
+  .status-completed { background: #00A86B; }
+  .status-cancelled { background: #DC2626; }
+  
+  .exchange-rate-box { background: rgba(0,0,0,0.2); border-radius: 16px; padding: 12px; margin-bottom: 16px; text-align: center; }
+  .exchange-rate { font-size: 24px; font-weight: bold; color: #00D4FF; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .flex-row { display: flex; gap: 10px; align-items: center; margin-top: 5px; margin-bottom: 10px; }
+  .flex-row input { flex: 2; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid #00D4FF; border-radius: 12px; padding: 12px; }
+  .flex-row button { flex: 1; }
+  .sell-btn { background: #00A86B; border-radius: 40px; }
+  .estimate-text { font-size: 11px; color: #6B7CA8; }
+  .exchange-info { margin-top: 16px; background: rgba(0,0,0,0.2); border-radius: 12px; padding: 12px; text-align: center; }
+  .exchange-info-title { font-size: 11px; color: #FFD700; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .exchange-info-text { font-size: 10px; color: #8EA3D4; margin-top: 5px; }
+  
+  .tasks-container { margin: 16px; }
+  .tasks-title { font-size: 18px; margin-bottom: 16px; }
+  .task-card { margin-bottom: 12px; }
+  .task-desc { font-size: 12px; color: #8EA3D4; margin: 4px 0; }
+  .task-rewards { margin-top: 8px; display: flex; gap: 12px; align-items: center; }
+  .task-btn { margin-top: 8px; background: #00A86B !important; border-radius: 40px; }
+  .task-completed { margin-top: 8px; font-size: 11px; color: #00A86B; }
+  .task-pending { margin-top: 8px; font-size: 11px; color: #FF8C00; }
+  
+  hr { margin: 20px 0; border-color: rgba(0,212,255,0.2); }
+  .copy-mini { background: #FF8C00; padding: 4px 10px; font-size: 11px; border-radius: 20px; width: auto; }
+  
+  .icon-img { width: 14px; height: 14px; vertical-align: middle; }
+  .icon-img-small { width: 10px; height: 10px; vertical-align: middle; }
+  
+  .mining-indicator { display: inline-block; width: 8px; height: 8px; background: #00FFAA; border-radius: 50%; margin-right: 6px; animation: blink 1s infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(10, 20, 30, 0.95);
+    backdrop-filter: blur(12px);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 60px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 1000;
+    opacity: 0;
+    transition: all 0.25s ease;
+    pointer-events: none;
+    border: 1px solid rgba(0, 212, 255, 0.4);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+  }
+  
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  
+  .toast-success {
+    border-color: rgba(80, 140, 255, 0.6);
+    background: rgba(15, 25, 70, 0.6);
+    backdrop-filter: blur(10px);
+    color: #AFCBFF;
+  }
+  
+  .toast-error {
+    border-color: #FF4444;
+    background: rgba(40, 0, 0, 0.95);
+    color: #FF8888;
+  }
+</style>
 </head>
 <body>
-    <div class="info">
-        <h1>🧪 Telegram WebApp Test</h1>
-        <div class="status" id="status">Проверка...</div>
-        <div id="height"></div>
-        <div id="expanded"></div>
-        <div id="platform"></div>
-    </div>
-    <button id="expandBtn">⛶ РАЗВЕРНУТЬ ВРУЧНУЮ</button>
 
-    <script>
-        // Получаем объект Telegram WebApp
-        let tg = window.Telegram.WebApp;
-        
-        // Функция обновления информации
-        function updateInfo() {
-            document.getElementById('height').innerHTML = `📏 Высота экрана: <strong>${tg.viewportHeight}px</strong>`;
-            document.getElementById('expanded').innerHTML = `🔓 Expanded: <strong class="${tg.isExpanded ? 'success' : 'error'}">${tg.isExpanded ? 'ДА ✅' : 'НЕТ ❌'}</strong>`;
-            document.getElementById('platform').innerHTML = `📱 Платформа: <strong>${tg.platform || 'неизвестно'}</strong>`;
-            
-            if (tg.isExpanded) {
-                document.getElementById('status').innerHTML = '✅ Fullscreen АКТИВЕН';
-                document.getElementById('status').className = 'status success';
-            } else {
-                document.getElementById('status').innerHTML = '❌ Fullscreen НЕ АКТИВЕН';
-                document.getElementById('status').className = 'status error';
-            }
-        }
-        
-        // Автоматический вызов expand при загрузке
-        console.log('Вызываем tg.expand() автоматически');
-        tg.expand();
-        tg.ready();
-        
-        // Небольшая задержка для обновления информации
-        setTimeout(updateInfo, 100);
-        setTimeout(updateInfo, 500);
-        setTimeout(updateInfo, 1000);
-        
-        // Кнопка для ручного вызова
-        document.getElementById('expandBtn').onclick = function() {
-            tg.expand();
-            updateInfo();
-            alert('Вызван expand! Высота: ' + tg.viewportHeight + 'px\nExpanded: ' + tg.isExpanded);
-        };
-        
-        // Логируем всё в консоль
-        console.log('WebApp object:', tg);
-        console.log('Initial height:', tg.viewportHeight);
-        console.log('Is expanded:', tg.isExpanded);
-    </script>
+<div id="app" style="display:none">
+<div class="header">
+  <div class="user-info" id="userInfo">
+    <div class="avatar" id="avatar">👤</div>
+    <div class="user-name">
+      <h3 id="userFirstName">Загрузка...</h3>
+      <p id="userStatus">Telegram ID: ---</p>
+    </div>
+    <div class="user-id" id="userIdShort">---</div>
+  </div>
+
+  <div class="balance-row">
+    <div class="balance-card">
+      <div class="balance-label"><img src="ton.png" class="icon-img"> TON Balance</div>
+      <div class="balance-value">
+        <span id="ton">0</span>
+      </div>
+    </div>
+    <div class="balance-card">
+      <div class="balance-label"><img src="gpu.png" class="icon-img"> GPU Tokens</div>
+      <div class="balance-value">
+        <span id="gpuBalance">0</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="home" class="tab active">
+  <div class="mining-panel">
+    <div class="mining-title">
+      <i class="fa-solid fa-microchip"></i> АКТИВНЫЙ МАЙНИНГ
+      <span class="mining-indicator"></span>
+    </div>
+    <div class="mining-stats">
+      <div class="mining-card">
+        <div class="mining-label"><img src="ton.png" class="icon-img"> НАКОПЛЕНО TON</div>
+        <div class="mining-value" id="accumulatedTon">0.0000</div>
+        <div class="mining-sub" id="miningRateTon">+0.0000 TON/день</div>
+      </div>
+      <div class="mining-card">
+        <div class="mining-label"><img src="gpu.png" class="icon-img"> НАКОПЛЕНО GPU</div>
+        <div class="mining-value" id="accumulatedGpu">0.0000</div>
+        <div class="mining-sub" id="miningRateGpu">+0.00 GPU/день</div>
+      </div>
+    </div>
+    <button class="claim-all-btn" id="claimAllBtn">ЗАБРАТЬ НАКОПЛЕННОЕ</button>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div id="referral" class="tab">
+  <div class="ref-stats">
+    <h3>👥 Приглашено друзей</h3>
+    <div class="friend-count" id="friendCount">0</div>
+    <div class="friends-list" id="friendsList">
+      <div style="text-align:center; padding:20px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>
+    </div>
+  </div>
+  <div class="ref-link-box">
+    <span id="refLink">загрузка...</span>
+    <button class="copy-btn" id="copyRefBtn">📋 Коп</button>
+  </div>
+</div>
+
+<div id="staking" class="tab">
+  <div class="deposit-box">
+    <h3><i class="fa-solid fa-arrows-spin"></i> Обмен валют</h3>
+    <div class="exchange-rate-box">
+      <div style="font-size: 12px; color: #8EA3D4;">Текущий курс</div>
+      <div class="exchange-rate">
+        1 <img src="gpu.png" class="icon-img"> = 0.001 <img src="ton.png" class="icon-img">
+      </div>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <label><img src="gpu.png" class="icon-img"> Продать GPU за <img src="ton.png" class="icon-img"></label>
+      <div class="flex-row">
+        <input type="number" id="sellGpuAmount" placeholder="Количество GPU">
+        <button id="sellGpuBtn" class="sell-btn">Продать</button>
+      </div>
+      <div class="estimate-text" id="sellEstimate">Вы получите: 0 <img src="ton.png" class="icon-img-small"></div>
+    </div>
+    
+    <div class="exchange-info">
+      <div class="exchange-info-title">
+        <i class="fa-regular fa-clock"></i> Не спешите продавать!
+      </div>
+      <div class="exchange-info-text">
+        Каждый месяц стоимость 1 <img src="gpu.png" class="icon-img-small"> увеличивается в 2 раза
+      </div>
+    </div>
+    
+    <div style="margin-top: 20px; background: rgba(0,0,0,0.2); border-radius: 16px; padding: 20px; text-align: center; border: 1px solid rgba(255, 215, 0, 0.3);">
+      <i class="fa-solid fa-chart-line" style="font-size: 32px; color: #FFD700; margin-bottom: 12px; display: block;"></i>
+      <h4 style="color: #FFD700;">Staking Pool</h4>
+      <p style="font-size: 12px; color: #8EA3D4;">Функция стейкинга скоро будет доступна</p>
+    </div>
+  </div>
+</div>
+
+<div id="tasks" class="tab">
+  <div class="tasks-container">
+    <h3 class="tasks-title">📋 Ежедневные задания</h3>
+    <div id="tasksListGame">
+      <div style="text-align:center; padding:20px; color:#6B7CA8;">Загрузка...</div>
+    </div>
+  </div>
+</div>
+
+<div id="wallet" class="tab">
+  <div class="deposit-box">
+    <h3><img src="ton.png" class="icon-img"> Пополнить баланс</h3>
+    <div id="depositForm">
+      <label>Сумма пополнения (<img src="ton.png" class="icon-img-small">)</label>
+      <input id="depositAmount" type="number" min="0.1" step="0.1" placeholder="Например, 5">
+      <button class="pay-btn" id="payBtn">💸 Оплатить</button>
+    </div>
+    <div id="depositConfirm" style="display: none;">
+      <div style="background: rgba(0,168,107,0.1); border-radius: 16px; padding: 16px; margin-bottom: 16px; border: 1px solid #00A86B;">
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 11px; color: #8EA3D4;">💰 СУММА</div>
+          <div style="font-size: 20px; font-weight: bold; color: #00FFAA;" id="paymentAmount">0 <img src="ton.png" class="icon-img-small"></div>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 11px; color: #8EA3D4;">🏦 КОШЕЛЁК</div>
+          <div style="font-size: 12px; font-family: monospace; color: #FFD699; word-break: break-all; background: rgba(0,0,0,0.4); padding: 8px; border-radius: 8px;" id="paymentWallet">Загрузка...</div>
+          <button class="copy-mini" onclick="copyText(document.getElementById('paymentWallet').innerText)">📋 Копировать</button>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <button id="confirmPayBtn" style="background: #00A86B; flex: 1;">✅ Я оплатил</button>
+        <button id="cancelPayBtn" style="background: #DC2626; flex: 1;">❌ Отменить</button>
+      </div>
+    </div>
+    <hr>
+    <h3><img src="ton.png" class="icon-img"> Вывод TON</h3>
+    <label>Сумма вывода (<img src="ton.png" class="icon-img-small">)</label>
+    <input id="withdrawAmount" type="number" min="1" step="0.5" placeholder="Минимум 1">
+    <label>TON-кошелёк для вывода</label>
+    <textarea id="withdrawWallet" rows="2" placeholder="Введите ваш TON-кошелёк (например, EQD..."></textarea>
+    <button class="pay-btn withdraw-btn" id="withdrawBtn">💸 Запросить вывод</button>
+    <hr>
+    <h3>📜 История транзакций</h3>
+    <div id="historyList" class="history-list">
+      <div style="text-align:center; padding:20px; color:#6B7CA8;">Загрузка...</div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-nav">
+  <button class="nav-btn active" onclick="openTab('home',this)"><i class="fa-solid fa-house"></i></button>
+  <button class="nav-btn" onclick="openTab('referral',this)"><i class="fa-solid fa-user-group"></i></button>
+  <button class="nav-btn" onclick="openTab('staking',this)"><i class="fa-solid fa-coins"></i></button>
+  <button class="nav-btn" onclick="openTab('tasks',this)"><i class="fa-solid fa-list-check"></i></button>
+  <button class="nav-btn" onclick="openTab('wallet',this)"><i class="fa-solid fa-wallet"></i></button>
+</div>
+</div>
+
+<div id="loading" class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Загрузка данных...</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ========== НАСТРОЙКИ ==========
+const API_URL = "https://tst-production-c55e.up.railway.app/api/tg";
+const BOT_USERNAME = "Minegpubot";
+
+// ========== УВЕДОМЛЕНИЯ ==========
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = `toast toast-${type}`;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ========== ДАННЫЕ МАЙНЕРОВ ==========
+const gpuTemplates = [
+  { id: "basic", name: "Basic Miner", price: 1, priceCurrency: "gpu", maxQuantity: 30,
+    tonPerDay: 0.01, gpuPerDay: 15, image: "basicminer.png", isReferral: false },
+  { id: "normal", name: "Normal Miner", price: 2, priceCurrency: "ton", maxQuantity: null,
+    tonPerDay: 0.02, gpuPerDay: 15, image: "normalminer.png", isReferral: false },
+  { id: "pro", name: "Pro Miner", price: 10, priceCurrency: "ton", maxQuantity: null,
+    tonPerDay: 0.1, gpuPerDay: 75, image: "prominer.png", isReferral: false },
+  { id: "ultra", name: "Ultra Miner", price: 50, priceCurrency: "ton", maxQuantity: null,
+    tonPerDay: 0.6, gpuPerDay: 380, image: "ultraminer.png", isReferral: false },
+  { id: "legendary", name: "Legendary Miner", price: 100, priceCurrency: "ton", maxQuantity: null,
+    tonPerDay: 1.4, gpuPerDay: 780, image: "legendaryminer.png", isReferral: false },
+  { id: "minex", name: "Minex", price: 500, priceCurrency: "ton", maxQuantity: null,
+    tonPerDay: 7, gpuPerDay: 1800, image: "xminer.png", isReferral: false },
+  { id: "friend", name: "Friend Miner", price: 0, priceCurrency: "ref", maxQuantity: null,
+    tonPerDay: 0.1, gpuPerDay: 15, image: "friendminer.png", 
+    isReferral: true, requiredActive: 10, requiredEarned: 30 },
+  { id: "bro", name: "Bro Miner", price: 0, priceCurrency: "ref", maxQuantity: null,
+    tonPerDay: 0.5, gpuPerDay: 75, image: "brominer.png", 
+    isReferral: true, requiredActive: 50, requiredEarned: 30 },
+  { id: "nexus", name: "Nexus Miner", price: 0, priceCurrency: "ref", maxQuantity: null,
+    tonPerDay: 1.5, gpuPerDay: 200, image: "nexusminer.png", 
+    isReferral: true, requiredActive: 150, requiredEarned: 30 }
+];
+
+const EXCHANGE_RATE = 0.001;
+
+// ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
+let tg = window.Telegram.WebApp;
+let user = tg.initDataUnsafe?.user;
+let userId = user?.id || "test_" + Math.floor(Math.random() * 10000);
+
+let playerData = {
+  ton: 0,
+  gpuTokens: 0,
+  friends: 0,
+  invitedFriends: [],
+  transactions: []
+};
+
+let minerQuantities = {};
+let accumulatedTon = 0;
+let accumulatedGpu = 0;
+let lastMiningTimestamp = Date.now();
+
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+function initMinerQuantities() {
+  for (const miner of gpuTemplates) {
+    if (minerQuantities[miner.id] === undefined) minerQuantities[miner.id] = 0;
+  }
+  if (minerQuantities["basic"] === 0) minerQuantities["basic"] = 1;
+}
+
+function updateUI() {
+  document.getElementById("ton").innerText = playerData.ton.toFixed(4);
+  document.getElementById("gpuBalance").innerText = playerData.gpuTokens.toFixed(2);
+  document.getElementById("friendCount").innerText = playerData.friends;
+}
+
+function formatDate(date) { return new Date(date).toLocaleString(); }
+
+function renderHistory() {
+  const container = document.getElementById("historyList");
+  if (!container) return;
+  if (!playerData.transactions || playerData.transactions.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">📭 История транзакций пуста</div>';
+    return;
+  }
+  container.innerHTML = playerData.transactions.map(t => {
+    let statusText = '', statusClass = '';
+    if (t.status === 'pending') { statusText = '⏳ Ожидает'; statusClass = 'status-pending'; }
+    else if (t.status === 'completed') { statusText = '✅ Выполнено'; statusClass = 'status-completed'; }
+    else { statusText = '❌ Отклонено'; statusClass = 'status-cancelled'; }
+    const typeText = t.type === 'deposit' ? '💎 Пополнение' : '📤 Вывод';
+    const amountColor = t.type === 'deposit' ? '#00A86B' : '#FF8C00';
+    return `<div class="history-item">
+              <div class="history-info">
+                <div class="history-amount" style="color:${amountColor}">
+                  ${t.type === 'deposit' ? '+' : '-'} ${t.amount} <img src="ton.png" style="width: 14px; height: 14px;">
+                </div>
+                <div class="history-date">${formatDate(t.createdAt)}</div>
+                <div style="font-size:10px;">${typeText}</div>
+              </div>
+              <div><span class="status-badge ${statusClass}">${statusText}</span></div>
+            </div>`;
+  }).join('');
+}
+
+function renderFriendsList() {
+  const container = document.getElementById("friendsList");
+  if (!container) return;
+  if (!playerData.invitedFriends || playerData.invitedFriends.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>';
+    return;
+  }
+  container.innerHTML = playerData.invitedFriends.map(f => {
+    const displayName = f.friend_name || f.name || (f.friendId ? `User_${f.friendId.slice(-5)}` : 'Аноним');
+    return `<div class="friend-item"><div class="friend-avatar">👤</div><div class="friend-name">${displayName}</div><div class="friend-earned"><span>${f.earnedGpu || 0}</span><img src="gpu.png" style="width: 16px; height: 16px;"></div></div>`;
+  }).join('');
+}
+
+function updateRefLink() { document.getElementById("refLink").innerText = `https://t.me/${BOT_USERNAME}?start=ref_${userId}`; }
+
+function getTotalMiningRates() {
+  let totalTonPerDay = 0, totalGpuPerDay = 0;
+  for (const miner of gpuTemplates) {
+    const qty = minerQuantities[miner.id] || 0;
+    totalTonPerDay += miner.tonPerDay * qty;
+    totalGpuPerDay += miner.gpuPerDay * qty;
+  }
+  return { totalTonPerDay, totalGpuPerDay };
+}
+
+function updateMiningRateDisplay() {
+  const { totalTonPerDay, totalGpuPerDay } = getTotalMiningRates();
+  document.getElementById("miningRateTon").innerHTML = `+${totalTonPerDay.toFixed(4)} TON/день`;
+  document.getElementById("miningRateGpu").innerHTML = `+${totalGpuPerDay.toFixed(2)} GPU/день`;
+}
+
+function startClientMining() {
+  setInterval(() => {
+    const now = Date.now();
+    const deltaSeconds = (now - lastMiningTimestamp) / 1000;
+    if (deltaSeconds <= 0 || deltaSeconds > 10) {
+      lastMiningTimestamp = now;
+      return;
+    }
+    const { totalTonPerDay, totalGpuPerDay } = getTotalMiningRates();
+    const deltaDays = deltaSeconds / (24 * 3600);
+    const earnedTon = totalTonPerDay * deltaDays;
+    const earnedGpu = totalGpuPerDay * deltaDays;
+    if (earnedTon > 0 || earnedGpu > 0) {
+      accumulatedTon += earnedTon;
+      accumulatedGpu += earnedGpu;
+      document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
+      document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
+    }
+    lastMiningTimestamp = now;
+  }, 1000);
+}
+
+// ========== СИНХРОНИЗАЦИЯ ==========
+async function syncWithServer() {
+  const result = await apiRequest("register", {});
+  if (result?.success && result.data) {
+    playerData.ton = result.data.ton;
+    playerData.gpuTokens = result.data.gpu;
+    playerData.friends = result.data.friends;
+    playerData.invitedFriends = result.data.invitedFriends || [];
+    playerData.transactions = result.data.transactions || [];
+    
+    // НЕ перезаписываем накопления!
+    
+    if (result.data.minerQuantities) {
+      minerQuantities = result.data.minerQuantities;
+      renderAllCards();
+      updateMiningRateDisplay();
+    }
+    
+    updateUI();
+    renderHistory();
+    return true;
+  }
+  return false;
+}
+
+// ========== СБОР НАКОПЛЕННОГО ==========
+async function claimAccumulatedReward() {
+  const result = await apiRequest("claim", {});
+  
+  if (result?.success) {
+    if (result.data) {
+      playerData.ton = result.data.ton;
+      playerData.gpuTokens = result.data.gpu;
+      accumulatedTon = result.data.accumulatedTon;
+      accumulatedGpu = result.data.accumulatedGpu;
+      document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
+      document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
+      updateUI();
+    } else {
+      await syncWithServer();
+    }
+    showToast("🎉 Награда собрана!", 'success');
+  } else if (result?.error === 'NOTHING_TO_CLAIM') {
+    showToast("Накоплений пока нет! Купите майнеры и подождите.", 'error');
+  } else if (result?.error === 'TOO_FAST') {
+    showToast("⚠️ Слишком часто! Подождите секунду.", 'error');
+  } else {
+    showToast("❌ Ошибка при сборе награды", 'error');
+  }
+}
+
+// ========== ПОКУПКА МАЙНЕРОВ ==========
+async function buyMiner(minerId) {
+  const miner = gpuTemplates.find(m => m.id === minerId);
+  if (!miner) return;
+  
+  const result = await apiRequest("buy", { minerId, quantity: 1 });
+  
+  if (result?.success) {
+    if (result.data) {
+      playerData.ton = result.data.ton;
+      playerData.gpuTokens = result.data.gpu;
+      minerQuantities = result.data.minerQuantities;
+      renderAllCards();
+      updateMiningRateDisplay();
+      updateUI();
+    } else {
+      await syncWithServer();
+    }
+    showToast(`✅ Вы купили ${miner.name}!`, 'success');
+  } else if (result?.error === 'LIMIT_REACHED') {
+    showToast(`❌ Вы можете купить не более ${miner.maxQuantity} шт. ${miner.name}`, 'error');
+  } else if (result?.error === 'INSUFFICIENT_TON') {
+    showToast(`❌ Недостаточно TON. Нужно: ${miner.price} TON`, 'error');
+  } else if (result?.error === 'INSUFFICIENT_GPU') {
+    showToast(`❌ Недостаточно GPU. Нужно: ${miner.price} GPU`, 'error');
+  } else if (result?.error === 'TOO_FAST') {
+    showToast("⚠️ Слишком часто! Подождите секунду.", 'error');
+  } else {
+    showToast("❌ Ошибка при покупке", 'error');
+  }
+}
+
+function renderMinerCard(minerId) {
+  const card = document.getElementById(`card_${minerId}`);
+  if (!card) return;
+  const miner = gpuTemplates.find(m => m.id === minerId);
+  const quantity = minerQuantities[miner.id] || 0;
+  const isLimitReached = miner.maxQuantity !== null && quantity >= miner.maxQuantity;
+  
+  let priceText = '';
+  let canBuy = true;
+  
+  if (miner.isReferral) {
+    const activeCount = playerData.invitedFriends ? playerData.invitedFriends.filter(f => (f.earnedGpu || 0) >= miner.requiredEarned).length : 0;
+    canBuy = activeCount >= miner.requiredActive;
+    priceText = canBuy ? '🎁 Бесплатно!' : `🔒 ${activeCount}/${miner.requiredActive}`;
+  } else if (miner.priceCurrency === 'gpu') {
+    priceText = `${miner.price} <img src="gpu.png" class="icon-img-small">`;
+  } else {
+    priceText = `${miner.price} <img src="ton.png" class="icon-img-small">`;
+  }
+  
+  card.innerHTML = `
+    <img src="${miner.image}" class="gpu-img" onerror="this.src='basicminer.png'">
+    <div class="card-info">
+      <h3>
+        ${miner.name} <span class="quantity-badge">×${quantity}</span>
+        ${miner.isReferral ? '<span class="referral-badge">🎁 Реферальный</span>' : ''}
+        ${miner.maxQuantity ? `<span class="limit-badge">Макс ${miner.maxQuantity}</span>` : ''}
+      </h3>
+      <div class="rewards-info">
+        <span>+${miner.tonPerDay} <img src="ton.png" class="icon-img-small">/день</span>
+        <span>+${miner.gpuPerDay} <img src="gpu.png" class="icon-img-small">/день</span>
+      </div>
+      <div class="button-group">
+        <button class="buy-btn" data-miner="${minerId}" ${(isLimitReached || (!canBuy && miner.isReferral)) ? 'disabled' : ''}>
+          ${isLimitReached ? '📦 Лимит' : `Купить за ${priceText}`}
+        </button>
+      </div>
+      ${quantity > 0 ? `<div class="mining-rate">⚡ ${quantity} шт.</div>` : ''}
+    </div>
+  `;
+  const btn = card.querySelector('.buy-btn');
+  if (btn && !btn.disabled && !isLimitReached) btn.onclick = () => buyMiner(minerId);
+}
+
+function renderAllCards() {
+  for (const miner of gpuTemplates) renderMinerCard(miner.id);
+}
+
+function initGrid() {
+  const grid = document.getElementById("grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  for (const miner of gpuTemplates) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.id = `card_${miner.id}`;
+    grid.appendChild(card);
+    renderMinerCard(miner.id);
+  }
+}
+
+// ========== API ==========
+async function apiRequest(action, additionalData = {}) {
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, user_id: userId.toString(), name: user?.first_name || "Игрок", ...additionalData })
+    });
+    const result = await response.json();
+    if (result.error === 'BANNED') { showToast(result.message || "❌ Аккаунт заблокирован", 'error'); return null; }
+    return result;
+  } catch (error) { console.error(error); return null; }
+}
+
+async function loadUserData(referrerId = null) {
+  const result = await apiRequest("register", { referrer_id: referrerId });
+  if (result?.success && result.data) {
+    playerData = { 
+      ton: result.data.ton, 
+      gpuTokens: result.data.gpu, 
+      friends: result.data.friends, 
+      invitedFriends: result.data.invitedFriends || [],
+      transactions: result.data.transactions || [] 
+    };
+    
+    if (result.data.minerQuantities) minerQuantities = result.data.minerQuantities;
+    else if (result.data.gameState?.minerQuantities) minerQuantities = result.data.gameState.minerQuantities;
+    initMinerQuantities();
+    
+    accumulatedTon = result.data.accumulatedTon || 0;
+    accumulatedGpu = result.data.accumulatedGpu || 0;
+    document.getElementById("accumulatedTon").innerText = accumulatedTon.toFixed(6);
+    document.getElementById("accumulatedGpu").innerText = accumulatedGpu.toFixed(4);
+    
+    updateUI();
+    renderFriendsList();
+    renderHistory();
+    renderAllCards();
+    updateMiningRateDisplay();
+    lastMiningTimestamp = Date.now();
+    return true;
+  }
+  return false;
+}
+
+async function loadReferrals() {
+  const result = await apiRequest("getReferrals");
+  if (result?.success && result.referrals) {
+    playerData.invitedFriends = result.referrals;
+    playerData.friends = result.referrals.length;
+    renderFriendsList();
+    renderAllCards();
+    updateUI();
+  }
+}
+
+// ========== ПОПОЛНЕНИЕ И ВЫВОД ==========
+async function createDeposit(amount) {
+  const result = await apiRequest("createDeposit", { amount });
+  if (result?.success) return result.deposit;
+  return null;
+}
+
+async function createWithdraw(amount, wallet) {
+  if (amount < 1) { showToast("Минимум 1 TON", 'error'); return false; }
+  if (!wallet || wallet.length < 10) { showToast("Неверный кошелёк", 'error'); return false; }
+  if (playerData.ton < amount) { showToast("Недостаточно TON", 'error'); return false; }
+  const result = await apiRequest("createWithdraw", { amount, tonWallet: wallet });
+  if (result?.success) {
+    document.getElementById("withdrawAmount").value = "";
+    document.getElementById("withdrawWallet").value = "";
+    await syncWithServer();
+    showToast("Заявка на вывод создана!", 'success');
+    return true;
+  }
+  showToast(result?.error || "Ошибка", 'error');
+  return false;
+}
+
+// ========== ЗАДАНИЯ ==========
+async function loadTasksGame() {
+  const container = document.getElementById("tasksListGame");
+  if (!container) return;
+  const result = await apiRequest("tasks/list", {});
+  if (result?.success && result.tasks) {
+    if (result.tasks.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">📭 Нет активных заданий</div>';
+      return;
+    }
+    container.innerHTML = result.tasks.map(task => {
+      let statusHtml = '', buttonHtml = '';
+      if (task.completed) statusHtml = '<div class="task-completed">✅ Выполнено</div>';
+      else if (task.pending) statusHtml = '<div class="task-pending">⏳ Проверка</div>';
+      else buttonHtml = `<button class="task-btn" onclick="completeTask('${task.id}')">✅ Выполнить</button>`;
+      return `<div class="card task-card"><div class="card-info"><h3>${task.title}</h3><div class="task-desc">${task.description}</div><div class="rewards-info">+${task.rewardTon} TON | +${task.rewardGpu} GPU</div>${statusHtml}${buttonHtml}</div></div>`;
+    }).join('');
+  } else {
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">📭 Нет заданий</div>';
+  }
+}
+
+async function completeTask(taskId) {
+  await apiRequest("tasks/complete", { taskId });
+  await loadTasksGame();
+  await syncWithServer();
+}
+
+// ========== ПРОДАЖА GPU ==========
+function initExchange() {
+  const sellInput = document.getElementById("sellGpuAmount");
+  const sellEstimate = document.getElementById("sellEstimate");
+  
+  if (sellInput) {
+    sellInput.addEventListener("input", function() {
+      const amount = parseFloat(this.value) || 0;
+      sellEstimate.innerHTML = `Вы получите: ${(amount * EXCHANGE_RATE).toFixed(4)} <img src="ton.png" class="icon-img-small">`;
+    });
+  }
+  
+  document.getElementById("sellGpuBtn").onclick = async () => {
+    await syncWithServer();
+    
+    const amount = parseFloat(document.getElementById("sellGpuAmount").value);
+    if (isNaN(amount) || amount <= 0) return;
+    if (playerData.gpuTokens < amount) { 
+      showToast("Недостаточно GPU", 'error');
+      return; 
+    }
+    
+    const tonReceived = amount * EXCHANGE_RATE;
+    playerData.gpuTokens -= amount;
+    playerData.ton += tonReceived;
+    
+    updateUI();
+    const saveResult = await apiRequest("save", { 
+      ton: playerData.ton, 
+      gpu: playerData.gpuTokens, 
+      friends: playerData.friends,
+      accumulatedTon: accumulatedTon,
+      accumulatedGpu: accumulatedGpu,
+      minerQuantities: minerQuantities 
+    });
+    
+    if (saveResult?.success) {
+      await syncWithServer();
+      document.getElementById("sellGpuAmount").value = "";
+      showToast(`✅ Продано ${amount} GPU за ${tonReceived.toFixed(4)} TON`, 'success');
+    } else {
+      showToast("❌ Ошибка", 'error');
+    }
+  };
+}
+
+// ========== НАВИГАЦИЯ ==========
+window.openTab = function(id, btn) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  if (id === "referral") { loadReferrals(); updateRefLink(); }
+  if (id === "wallet") { renderHistory(); }
+  if (id === "tasks") { loadTasksGame(); }
+};
+
+function copyText(text) { 
+  navigator.clipboard.writeText(text);
+  showToast("Скопировано!", 'success');
+}
+
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
+async function init() {
+  tg.ready(); tg.expand();
+  if (user) {
+    document.getElementById("userFirstName").innerText = user.first_name || "Игрок";
+    if (user.username) document.getElementById("userStatus").innerHTML = `@${user.username}`;
+    document.getElementById("avatar").innerText = user.first_name ? user.first_name[0] : (user.username ? user.username[0].toUpperCase() : "👤");
+    document.getElementById("userIdShort").innerText = `#${userId.toString().slice(-5)}`;
+  }
+  
+  let referrerId = null;
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('startapp')) {
+    let param = urlParams.get('startapp');
+    if (param?.startsWith('ref_')) referrerId = param.replace('ref_', '');
+  }
+  if (!referrerId && tg.initDataUnsafe?.start_param) {
+    const startParam = tg.initDataUnsafe.start_param;
+    if (startParam?.startsWith('ref_')) referrerId = startParam.replace('ref_', '');
+  }
+  
+  initMinerQuantities();
+  initGrid();
+  await loadUserData(referrerId);
+  updateRefLink();
+  await loadReferrals();
+  initExchange();
+  
+  lastMiningTimestamp = Date.now();
+  startClientMining();
+  
+  setInterval(syncWithServer, 60000);
+  
+  document.getElementById("claimAllBtn").onclick = claimAccumulatedReward;
+  
+  document.getElementById("payBtn").onclick = async () => {
+    const amount = parseFloat(document.getElementById("depositAmount").value);
+    if (isNaN(amount) || amount < 0.1) { 
+      showToast("Введите сумму от 0.1 TON", 'error'); 
+      return; 
+    }
+    const depositData = await createDeposit(amount);
+    if (depositData) {
+      document.getElementById("paymentAmount").innerHTML = `${depositData.amount} <img src="ton.png" class="icon-img-small">`;
+      document.getElementById("paymentWallet").innerText = depositData.wallet;
+      document.getElementById("depositForm").style.display = "none";
+      document.getElementById("depositConfirm").style.display = "block";
+    }
+  };
+  document.getElementById("confirmPayBtn").onclick = async () => {
+    document.getElementById("depositConfirm").style.display = "none";
+    document.getElementById("depositForm").style.display = "block";
+    document.getElementById("depositAmount").value = "";
+    await syncWithServer();
+    showToast("Спасибо! Ожидайте зачисления", 'success');
+  };
+  document.getElementById("cancelPayBtn").onclick = () => {
+    document.getElementById("depositConfirm").style.display = "none";
+    document.getElementById("depositForm").style.display = "block";
+  };
+  document.getElementById("withdrawBtn").onclick = () => {
+    const amount = parseFloat(document.getElementById("withdrawAmount").value);
+    const wallet = document.getElementById("withdrawWallet").value.trim();
+    createWithdraw(amount, wallet);
+  };
+  document.getElementById("copyRefBtn").onclick = () => {
+    navigator.clipboard.writeText(document.getElementById("refLink").innerText);
+    showToast("Ссылка скопирована!", 'success');
+  };
+  
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("app").style.display = "block";
+}
+
+init();
+</script>
 </body>
 </html>
