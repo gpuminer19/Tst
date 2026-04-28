@@ -4,7 +4,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const TOKEN = '8663587522:AAEkCqnlOW3964GoFha7I8Smar9UFKbcBKA';
 
 // Адрес вашей игры на GitHub Pages
-const GAME_URL = 'https://tst-production-c55e.up.railway.app';
+const GAME_URL = 'https://t.me/Minegpubot/CryptoGPU';  // ← ИЗМЕНЕНО: прямая ссылка на Mini App
 
 // API бэкенда для засчёта рефералов
 const API_URL = 'https://tst-production-c55e.up.railway.app';
@@ -13,6 +13,7 @@ const bot = new TelegramBot(TOKEN, { polling: true });
 
 console.log('🤖 Бот @Testgpuuubot запущен!');
 console.log('✅ Рефералы засчитываются сразу после /start');
+console.log('🎮 Мини-приложение: https://t.me/Minegpubot/CryptoGPU');
 
 // Функция для засчёта реферала через бэкенд
 async function countReferral(userId, referrerId, userName) {
@@ -62,13 +63,13 @@ bot.onText(/\/start ref_(.+)/, async (msg, match) => {
     );
   }
   
-  // Отправляем кнопку с игрой
+  // ИСПРАВЛЕНО: отправляем кнопку с полноэкранной ссылкой
   await bot.sendMessage(chatId, `🚀 *Запустить игру*`, {
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [[{
-        text: '🚀 ИГРАТЬ',
-        web_app: { url: GAME_URL }
+        text: '🚀 ИГРАТЬ В ПОЛНЫЙ ЭКРАН',
+        url: 'https://t.me/Minegpubot/CryptoGPU'  // ← ИЗМЕНЕНО
       }]]
     }
   });
@@ -89,12 +90,13 @@ bot.onText(/\/start$/, async (msg) => {
     { parse_mode: 'Markdown' }
   );
   
+  // ИСПРАВЛЕНО: отправляем кнопку с полноэкранной ссылкой
   await bot.sendMessage(chatId, `🚀 *Запустить игру*`, {
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [[{
-        text: '🚀 ИГРАТЬ',
-        web_app: { url: GAME_URL }
+        text: '🚀 ИГРАТЬ В ПОЛНЫЙ ЭКРАН',
+        url: 'https://t.me/Minegpubot/CryptoGPU'  // ← ИЗМЕНЕНО
       }]]
     }
   });
@@ -107,13 +109,14 @@ bot.on('message', async (msg) => {
   
   // Если это не команда /start
   if (text && !text.startsWith('/start')) {
+    // ИСПРАВЛЕНО: отправляем кнопку с полноэкранной ссылкой
     await bot.sendMessage(chatId, 
       `🎮 *CRYPTOGPU*\n\nНажми на кнопку ниже, чтобы начать играть!`,
       {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [[
-            { text: '🚀 ИГРАТЬ', web_app: { url: GAME_URL } }
+            { text: '🚀 ИГРАТЬ В ПОЛНЫЙ ЭКРАН', url: 'https://t.me/Minegpubot/CryptoGPU' }  // ← ИЗМЕНЕНО
           ]]
         }
       }
@@ -122,3 +125,4 @@ bot.on('message', async (msg) => {
 });
 
 console.log('✅ Бот готов к работе!');
+console.log('🎮 Mini App ссылка: https://t.me/Minegpubot/CryptoGPU');
