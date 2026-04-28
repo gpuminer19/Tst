@@ -382,6 +382,7 @@ const EXCHANGE_RATE = 0.001;
 
 // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 let tg = window.Telegram.WebApp;
+tg.requestFullscreen();
 let user = tg.initDataUnsafe?.user;
 let userId = user?.id || "test_" + Math.floor(Math.random() * 10000);
 
