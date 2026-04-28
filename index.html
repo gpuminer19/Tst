@@ -10,8 +10,17 @@
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { background: #0B0E1A; font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; color: #fff; padding-bottom: 80px; }
   body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 30% 40%, #121936 0%, #070A14 100%); z-index: -2; }
-  .header { background: rgba(8, 12, 24, 0.85); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(0, 212, 255, 0.2); padding: 12px 20px 16px; border-radius: 0 0 28px 28px; }
-  .user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; background: rgba(0, 0, 0, 0.3); padding: 8px 12px; border-radius: 44px; }
+  .header {
+  position: sticky;
+  top: 0;
+  background: rgba(8, 12, 24, 0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+  padding: 80px 20px 16px;
+  border-radius: 0 0 28px 28px;
+  z-index: 100;
+}
+ .user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; background: rgba(0, 0, 0, 0.3); padding: 8px 12px; border-radius: 44px; }
   .avatar { width: 44px; height: 44px; background: linear-gradient(135deg, #00D4FF, #0066FF); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; }
   .user-name { flex: 1; }
   .user-name h3 { font-size: 16px; margin-bottom: 2px; }
