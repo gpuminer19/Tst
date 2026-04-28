@@ -2,37 +2,99 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <title>Telegram WebApp Test</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { margin: 0; background: #0B0E1A; color: white; font-family: sans-serif; }
-        .app { padding: 20px; text-align: center; }
-        button { background: #00D4FF; border: none; padding: 15px 30px; border-radius: 40px; font-size: 18px; margin-top: 20px; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #0B0E1A;
+            color: white;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .info {
+            background: rgba(0, 212, 255, 0.2);
+            padding: 20px;
+            border-radius: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #00D4FF;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 40px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #0B0E1A;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        .status {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .success { color: #00FFAA; }
+        .error { color: #FF4444; }
     </style>
 </head>
 <body>
-    <div class="app">
-        <h1>CryptoGPU</h1>
-        <p id="info">Загрузка...</p>
-        <button onclick="testExpand()">Проверить expand</button>
+    <div class="info">
+        <h1>🧪 Telegram WebApp Test</h1>
+        <div class="status" id="status">Проверка...</div>
+        <div id="height"></div>
+        <div id="expanded"></div>
+        <div id="platform"></div>
     </div>
+    <button id="expandBtn">⛶ РАЗВЕРНУТЬ ВРУЧНУЮ</button>
 
     <script>
+        // Получаем объект Telegram WebApp
         let tg = window.Telegram.WebApp;
         
-        function testExpand() {
-            tg.expand();
-            document.getElementById('info').innerHTML = 
-                'Высота: ' + tg.viewportHeight + 'px<br>' +
-                'Expanded: ' + tg.isExpanded;
+        // Функция обновления информации
+        function updateInfo() {
+            document.getElementById('height').innerHTML = `📏 Высота экрана: <strong>${tg.viewportHeight}px</strong>`;
+            document.getElementById('expanded').innerHTML = `🔓 Expanded: <strong class="${tg.isExpanded ? 'success' : 'error'}">${tg.isExpanded ? 'ДА ✅' : 'НЕТ ❌'}</strong>`;
+            document.getElementById('platform').innerHTML = `📱 Платформа: <strong>${tg.platform || 'неизвестно'}</strong>`;
+            
+            if (tg.isExpanded) {
+                document.getElementById('status').innerHTML = '✅ Fullscreen АКТИВЕН';
+                document.getElementById('status').className = 'status success';
+            } else {
+                document.getElementById('status').innerHTML = '❌ Fullscreen НЕ АКТИВЕН';
+                document.getElementById('status').className = 'status error';
+            }
         }
         
-        // Автоматический вызов
+        // Автоматический вызов expand при загрузке
+        console.log('Вызываем tg.expand() автоматически');
         tg.expand();
         tg.ready();
-        document.getElementById('info').innerHTML = 
-            'Высота: ' + tg.viewportHeight + 'px<br>' +
-            'Expanded: ' + tg.isExpanded;
+        
+        // Небольшая задержка для обновления информации
+        setTimeout(updateInfo, 100);
+        setTimeout(updateInfo, 500);
+        setTimeout(updateInfo, 1000);
+        
+        // Кнопка для ручного вызова
+        document.getElementById('expandBtn').onclick = function() {
+            tg.expand();
+            updateInfo();
+            alert('Вызван expand! Высота: ' + tg.viewportHeight + 'px\nExpanded: ' + tg.isExpanded);
+        };
+        
+        // Логируем всё в консоль
+        console.log('WebApp object:', tg);
+        console.log('Initial height:', tg.viewportHeight);
+        console.log('Is expanded:', tg.isExpanded);
     </script>
 </body>
 </html>
