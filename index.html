@@ -1,15 +1,38 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { margin: 0; background: #0B0E1A; color: white; font-family: sans-serif; }
+        .app { padding: 20px; text-align: center; }
+        button { background: #00D4FF; border: none; padding: 15px 30px; border-radius: 40px; font-size: 18px; margin-top: 20px; }
+    </style>
 </head>
 <body>
-    <h1>Test</h1>
+    <div class="app">
+        <h1>CryptoGPU</h1>
+        <p id="info">Загрузка...</p>
+        <button onclick="testExpand()">Проверить expand</button>
+    </div>
+
     <script>
         let tg = window.Telegram.WebApp;
+        
+        function testExpand() {
+            tg.expand();
+            document.getElementById('info').innerHTML = 
+                'Высота: ' + tg.viewportHeight + 'px<br>' +
+                'Expanded: ' + tg.isExpanded;
+        }
+        
+        // Автоматический вызов
         tg.expand();
         tg.ready();
-        document.body.innerHTML += "<p>Expand called: " + tg.viewportHeight + "</p>";
+        document.getElementById('info').innerHTML = 
+            'Высота: ' + tg.viewportHeight + 'px<br>' +
+            'Expanded: ' + tg.isExpanded;
     </script>
 </body>
 </html>
