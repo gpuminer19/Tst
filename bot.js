@@ -7,7 +7,7 @@ const TOKEN = '8663587522:AAEkCqnlOW3964GoFha7I8Smar9UFKbcBKA';
 const GAME_URL = 'https://gpuminer19.github.io/Tst';
 
 // API бэкенда для засчёта рефералов
-const API_URL = 'https://tst-production-b90a.up.railway.app/api/bot/registerRef';
+const API_URL = 'https://tst-production-c55e.up.railway.app/api/tg';
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
