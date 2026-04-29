@@ -120,39 +120,50 @@ if (type === 'deposit') {
 }
 
   // ========== ОБРАБОТКА ВЫВОДОВ ==========
-  if (type === 'withdraw') {
-    if (action === 'approve') {
-      try {
-        await axios.post(API_URL, {
-          action: 'approveWithdraw',
-          withdraw_id: id,
-          user_id: from.id
-        }, {
-          headers: {
-            'x-bot-secret': TELEGRAM_BOT_TOKEN
-          }
-        });
-        console.log(`📤 Вывод ${id} подтверждён`);
-      } catch (e) {
-        console.error(`❌ Ошибка подтверждения вывода ${id}:`, e.message);
-      }
-    } else if (action === 'reject') {
-      try {
-        await axios.post(API_URL, {
-          action: 'rejectWithdraw',
-          withdraw_id: id,
-          user_id: from.id
-        }, {
-          headers: {
-            'x-bot-secret': TELEGRAM_BOT_TOKEN
-          }
-        });
-        console.log(`❌ Вывод ${id} отклонён`);
-      } catch (e) {
-        console.error(`❌ Ошибка отклонения вывода ${id}:`, e.message);
+if (type === 'withdraw') {
+  if (action === 'approve') {
+    try {
+      console.log(`📤 Отправка approveWithdraw для вывода ${id}`);
+      const response = await axios.post(API_URL, {
+        action: 'approveWithdraw',
+        withdraw_id: id,
+        user_id: from.id.toString()
+      }, {
+        headers: {
+          'x-bot-secret': TELEGRAM_BOT_TOKEN,
+          'Content-Type': 'application/json'
+        }
+      });
+      console.log(`✅ Ответ сервера:`, response.data);
+      console.log(`📤 Вывод ${id} подтверждён`);
+    } catch (e) {
+      console.error(`❌ Ошибка подтверждения вывода ${id}:`, e.response?.data || e.message);
+    }
+  } else if (action === 'reject') {
+    try {
+      console.log(`📤 Отправка rejectWithdraw для вывода ${id}`);
+      const response = await axios.post(API_URL, {
+        action: 'rejectWithdraw',
+        withdraw_id: id,
+        user_id: from.id.toString()
+      }, {
+        headers: {
+          'x-bot-secret': TELEGRAM_BOT_TOKEN,
+          'Content-Type': 'application/json'
+        }
+      });
+      console.log(`✅ Ответ сервера:`, response.data);
+      console.log(`❌ Вывод ${id} отклонён`);
+    } catch (e) {
+      console.error(`❌ Ошибка отклонения вывода ${id}:`, e.response?.data || e.message);
+      // Дополнительная диагностика
+      if (e.response) {
+        console.error(`Статус: ${e.response.status}`);
+        console.error(`Данные ответа:`, e.response.data);
       }
     }
   }
+}
 
   // ========== ОБРАБОТКА ЗАДАНИЙ ==========
   if (type === 'task') {
