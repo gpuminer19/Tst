@@ -355,34 +355,88 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, accumulatedTon: 0, accumulatedGpu: 0 } });
     }
 
-    if (action === 'buy') {
-  if (!minerId) return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
+if (action === 'buy') {
+  console.log(`🟢🔵 [ПОКУПКА] =========== НАЧАЛО ===========`);
+  console.log(`🟢 [ПОКУПКА] Пользователь: ${user_id}`);
+  console.log(`🟢 [ПОКУПКА] Майнер: ${minerId}, количество: ${quantity || 1}`);
+  
+  if (!minerId) {
+    console.log(`🔴 [ПОКУПКА] ОШИБКА: minerId не указан`);
+    return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
+  }
+  
   const price = MINER_PRICES[minerId];
   const limit = MINER_LIMITS[minerId];
-  if (!price) return res.json({ success: false, error: "INVALID_MINER" });
+  
+  console.log(`🟢 [ПОКУПКА] Цена: TON=${price?.ton}, GPU=${price?.gpu}, лимит=${limit}`);
+  
+  if (!price) {
+    console.log(`🔴 [ПОКУПКА] ОШИБКА: майнер ${minerId} не найден в MINER_PRICES`);
+    return res.json({ success: false, error: "INVALID_MINER" });
+  }
+  
   const user = await User.findOne({ userId: user_id });
-  if (!user) return res.json({ success: false, error: "User not found" });
+  if (!user) {
+    console.log(`🔴 [ПОКУПКА] ОШИБКА: пользователь ${user_id} не найден`);
+    return res.json({ success: false, error: "User not found" });
+  }
+  
+  console.log(`🟢 [ПОКУПКА] ДО покупки:`);
+  console.log(`   - TON: ${user.ton}`);
+  console.log(`   - GPU: ${user.gpu}`);
+  console.log(`   - Майнеры:`, JSON.stringify(user.minerQuantities));
+  
   const currentQty = user.minerQuantities?.[minerId] || 0;
   const buyQuantity = quantity || 1;
-  if (limit !== null && currentQty + buyQuantity > limit) return res.json({ success: false, error: "LIMIT_REACHED" });
+  
+  console.log(`🟢 [ПОКУПКА] Текущее количество ${minerId}: ${currentQty}, покупаем: ${buyQuantity}`);
+  
+  if (limit !== null && currentQty + buyQuantity > limit) {
+    console.log(`🔴 [ПОКУПКА] ЛИМИТ: ${currentQty} + ${buyQuantity} > ${limit}`);
+    return res.json({ success: false, error: "LIMIT_REACHED" });
+  }
+  
   const totalTonPrice = price.ton * buyQuantity;
   const totalGpuPrice = price.gpu * buyQuantity;
-  if (totalTonPrice > 0 && user.ton < totalTonPrice) return res.json({ success: false, error: "INSUFFICIENT_TON" });
-  if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) return res.json({ success: false, error: "INSUFFICIENT_GPU" });
+  
+  console.log(`🟢 [ПОКУПКА] Стоимость: TON=${totalTonPrice}, GPU=${totalGpuPrice}`);
+  
+  if (totalTonPrice > 0 && user.ton < totalTonPrice) {
+    console.log(`🔴 [ПОКУПКА] НЕ ХВАТАЕТ TON: есть ${user.ton}, нужно ${totalTonPrice}`);
+    return res.json({ success: false, error: "INSUFFICIENT_TON" });
+  }
+  if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) {
+    console.log(`🔴 [ПОКУПКА] НЕ ХВАТАЕТ GPU: есть ${user.gpu}, нужно ${totalGpuPrice}`);
+    return res.json({ success: false, error: "INSUFFICIENT_GPU" });
+  }
+  
+  // Списываем средства
   if (totalTonPrice > 0) user.ton -= totalTonPrice;
   if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
+  
+  // Добавляем майнер
   user.minerQuantities = user.minerQuantities || {};
   user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
+  
   await user.save();
   
-  // ✅ ИСПРАВЛЕННЫЙ ВОЗВРАТ (данные прямо в корне)
+  console.log(`🟢 [ПОКУПКА] ПОСЛЕ покупки:`);
+  console.log(`   - TON: ${user.ton} (было ${user.ton + totalTonPrice}, списано ${totalTonPrice})`);
+  console.log(`   - GPU: ${user.gpu} (было ${user.gpu + totalGpuPrice}, списано ${totalGpuPrice})`);
+  console.log(`   - Майнеры:`, JSON.stringify(user.minerQuantities));
+  console.log(`🟢🔵 [ПОКУПКА] =========== УСПЕШНО ===========`);
+  
+  // Проверяем, что сохранилось в БД (дополнительная проверка)
+  const checkUser = await User.findOne({ userId: user_id });
+  console.log(`🟢 [ПОКУПКА] ПРОВЕРКА БД: майнеры=${JSON.stringify(checkUser.minerQuantities)}`);
+  
   return res.json({ 
     success: true, 
     ton: user.ton, 
     gpu: user.gpu, 
     minerQuantities: user.minerQuantities 
   });
-    }
+}
 
     if (action === 'getReferrals') {
       const user = await User.findOne({ userId: user_id });
