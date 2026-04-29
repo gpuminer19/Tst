@@ -184,6 +184,12 @@ function verifyTelegramInitData(initData) {
 
 // ========== MIDDLEWARE ПРОВЕРКИ ПОДПИСИ ==========
 app.use('/api/tg', (req, res, next) => {
+  // Пропускаем проверку для админ-действий от бота
+  const adminActions = ['confirmDeposit', 'rejectDeposit', 'approveWithdraw', 'rejectWithdraw', 'approveTask', 'rejectTask'];
+  if (adminActions.includes(req.body.action)) {
+    return next();
+  }
+  
   const initData = req.headers['x-telegram-init-data'];
   if (!initData && process.env.NODE_ENV !== 'production') return next();
   if (!initData) return res.status(401).json({ success: false, error: 'Unauthorized' });
