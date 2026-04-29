@@ -426,29 +426,41 @@ app.post('/api/tg', async (req, res) => {
     }
 
     if (action === 'confirmDeposit') {
-      const deposit = await Deposit.findById(deposit_id);
-      if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
-      await User.updateOne({ userId: deposit.userId }, { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } });
-      deposit.status = 'completed';
-      deposit.processedAt = new Date();
-      deposit.processedBy = 'admin';
-      await deposit.save();
-      return res.json({ success: true });
-    }
+  const deposit = await Deposit.findById(deposit_id);
+  if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
+  await User.updateOne({ userId: deposit.userId }, { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } });
+  deposit.status = 'completed';
+  deposit.processedAt = new Date();
+  deposit.processedBy = 'admin';
+  await deposit.save();
+  return res.json({ success: true });
+}
 
-    if (action === 'createWithdraw') {
-      if (!amount || amount < 1) return res.json({ success: false, error: 'Invalid amount' });
-      const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'withdraw' });
-      if (pendingCount >= 2) return res.json({ success: false, error: 'LIMIT_EXCEEDED' });
-      const user = await User.findOne({ userId: user_id });
-      if (!user || user.ton < amount) return res.json({ success: false, error: 'Insufficient balance' });
-      user.ton -= amount;
-      await user.save();
-      const withdraw = new Deposit({ userId: user_id, userName: name, amount, wallet: tonWallet, comment: `WITHDRAW_${user_id}_${Date.now()}`, type: 'withdraw' });
-      await withdraw.save();
-      await sendTelegramNotification(`📤 <b>Заявка на вывод!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON\nКошелёк: <code>${tonWallet}</code>`, [[{ text: "✅ Подтвердить", callback_data: `approve:withdraw:${withdraw._id}` }, { text: "❌ Отклонить", callback_data: `reject:withdraw:${withdraw._id}` }]]);
-      return res.json({ success: true });
-    }
+// ========== ОТКЛОНЕНИЕ ДЕПОЗИТА ==========
+if (action === 'rejectDeposit') {
+  const deposit = await Deposit.findById(deposit_id);
+  if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
+  deposit.status = 'cancelled';
+  deposit.processedAt = new Date();
+  deposit.processedBy = 'admin';
+  await deposit.save();
+  console.log(`❌ Депозит ${deposit_id} отклонён`);
+  return res.json({ success: true });
+}
+
+if (action === 'createWithdraw') {
+  if (!amount || amount < 1) return res.json({ success: false, error: 'Invalid amount' });
+  const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'withdraw' });
+  if (pendingCount >= 2) return res.json({ success: false, error: 'LIMIT_EXCEEDED' });
+  const user = await User.findOne({ userId: user_id });
+  if (!user || user.ton < amount) return res.json({ success: false, error: 'Insufficient balance' });
+  user.ton -= amount;
+  await user.save();
+  const withdraw = new Deposit({ userId: user_id, userName: name, amount, wallet: tonWallet, comment: `WITHDRAW_${user_id}_${Date.now()}`, type: 'withdraw' });
+  await withdraw.save();
+  await sendTelegramNotification(`📤 <b>Заявка на вывод!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON\nКошелёк: <code>${tonWallet}</code>`, [[{ text: "✅ Подтвердить", callback_data: `approve:withdraw:${withdraw._id}` }, { text: "❌ Отклонить", callback_data: `reject:withdraw:${withdraw._id}` }]]);
+  return res.json({ success: true });
+}
 
     if (action === 'tasks/list') {
       const tasks = await Task.find({ isActive: true }).sort({ order: 1 });
