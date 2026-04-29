@@ -871,12 +871,14 @@ mongoose.connect(process.env.MONGODB_URL).then(async () => {
   }));
   
   await ensureAdminExists();
-  
+
   // ========== УСТАНОВКА ВЕБХУКА ДЛЯ БОТА ==========
   if (TELEGRAM_BOT_TOKEN) {
     try {
-      await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${process.env.RAILWAY_PUBLIC_DOMAIN}/telegram/webhook`);
-      console.log('✅ Telegram webhook set');
+      // Убедитесь, что переменная RAILWAY_PUBLIC_DOMAIN установлена в Railway
+      const webhookUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/telegram/webhook`;
+      await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
+      console.log('✅ Telegram webhook set to:', webhookUrl);
     } catch (err) {
       console.error('❌ Webhook error:', err.message);
     }
