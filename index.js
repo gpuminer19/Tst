@@ -542,7 +542,12 @@ app.post('/api/tg', async (req, res) => {
       if (!checkRateLimit(user_id)) {
         return res.json({ success: false, error: "TOO_FAST" });
       }
-      
+
+      // Проверяем, что minerId передан
+      if (!minerId) {
+        return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
+      }
+
       const price = MINER_PRICES[minerId];
       const limit = MINER_LIMITS[minerId];
       
@@ -577,16 +582,7 @@ app.post('/api/tg', async (req, res) => {
       user.minerQuantities = user.minerQuantities || {};
       user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
       
-      await User.updateOne(
-        { userId: user_id },
-        { 
-          $set: { 
-            minerQuantities: user.minerQuantities,
-            ton: user.ton,
-            gpu: user.gpu
-          } 
-        }
-      );
+      await user.save();
       
       console.log(`⛏️ ${user_id}: купил ${buyQuantity} x ${minerId} за ${totalTonPrice} TON, ${totalGpuPrice} GPU. Теперь: ${user.minerQuantities[minerId]} шт.`);
       
