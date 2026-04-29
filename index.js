@@ -356,25 +356,32 @@ app.post('/api/tg', async (req, res) => {
     }
 
     if (action === 'buy') {
-      if (!minerId) return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
-      const price = MINER_PRICES[minerId];
-      const limit = MINER_LIMITS[minerId];
-      if (!price) return res.json({ success: false, error: "INVALID_MINER" });
-      const user = await User.findOne({ userId: user_id });
-      if (!user) return res.json({ success: false, error: "User not found" });
-      const currentQty = user.minerQuantities?.[minerId] || 0;
-      const buyQuantity = quantity || 1;
-      if (limit !== null && currentQty + buyQuantity > limit) return res.json({ success: false, error: "LIMIT_REACHED" });
-      const totalTonPrice = price.ton * buyQuantity;
-      const totalGpuPrice = price.gpu * buyQuantity;
-      if (totalTonPrice > 0 && user.ton < totalTonPrice) return res.json({ success: false, error: "INSUFFICIENT_TON" });
-      if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) return res.json({ success: false, error: "INSUFFICIENT_GPU" });
-      if (totalTonPrice > 0) user.ton -= totalTonPrice;
-      if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
-      user.minerQuantities = user.minerQuantities || {};
-      user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
-      await user.save();
-      return res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, minerQuantities: user.minerQuantities } });
+  if (!minerId) return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
+  const price = MINER_PRICES[minerId];
+  const limit = MINER_LIMITS[minerId];
+  if (!price) return res.json({ success: false, error: "INVALID_MINER" });
+  const user = await User.findOne({ userId: user_id });
+  if (!user) return res.json({ success: false, error: "User not found" });
+  const currentQty = user.minerQuantities?.[minerId] || 0;
+  const buyQuantity = quantity || 1;
+  if (limit !== null && currentQty + buyQuantity > limit) return res.json({ success: false, error: "LIMIT_REACHED" });
+  const totalTonPrice = price.ton * buyQuantity;
+  const totalGpuPrice = price.gpu * buyQuantity;
+  if (totalTonPrice > 0 && user.ton < totalTonPrice) return res.json({ success: false, error: "INSUFFICIENT_TON" });
+  if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) return res.json({ success: false, error: "INSUFFICIENT_GPU" });
+  if (totalTonPrice > 0) user.ton -= totalTonPrice;
+  if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
+  user.minerQuantities = user.minerQuantities || {};
+  user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
+  await user.save();
+  
+  // ✅ ИСПРАВЛЕННЫЙ ВОЗВРАТ (данные прямо в корне)
+  return res.json({ 
+    success: true, 
+    ton: user.ton, 
+    gpu: user.gpu, 
+    minerQuantities: user.minerQuantities 
+  });
     }
 
     if (action === 'getReferrals') {
