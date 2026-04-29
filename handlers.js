@@ -81,7 +81,7 @@ async function handleCallbackQuery(callbackQuery) {
     if (action === 'approve') {
       try {
         console.log(`📤 Отправка confirmDeposit для депозита ${id}`);
-        const response = await axios.post(API_URL, {
+        await axios.post(API_URL, {
           action: 'confirmDeposit',
           deposit_id: id,
           user_id: from.id
@@ -91,7 +91,6 @@ async function handleCallbackQuery(callbackQuery) {
             'Content-Type': 'application/json'
           }
         });
-        console.log(`✅ Ответ сервера:`, response.data);
         console.log(`💎 Депозит ${id} подтверждён`);
       } catch (e) {
         console.error(`❌ Ошибка подтверждения депозита ${id}:`, e.response?.data || e.message);
@@ -99,7 +98,7 @@ async function handleCallbackQuery(callbackQuery) {
     } else if (action === 'reject') {
       try {
         console.log(`📤 Отправка rejectDeposit для депозита ${id}`);
-        const response = await axios.post(API_URL, {
+        await axios.post(API_URL, {
           action: 'rejectDeposit',
           deposit_id: id,
           user_id: from.id
@@ -109,7 +108,6 @@ async function handleCallbackQuery(callbackQuery) {
             'Content-Type': 'application/json'
           }
         });
-        console.log(`✅ Ответ сервера:`, response.data);
         console.log(`❌ Депозит ${id} отклонён`);
       } catch (e) {
         console.error(`❌ Ошибка отклонения депозита ${id}:`, e.response?.data || e.message);
@@ -122,7 +120,7 @@ async function handleCallbackQuery(callbackQuery) {
     if (action === 'approve') {
       try {
         console.log(`📤 Отправка approveWithdraw для вывода ${id}`);
-        const response = await axios.post(API_URL, {
+        await axios.post(API_URL, {
           action: 'approveWithdraw',
           withdraw_id: id,
           user_id: from.id.toString()
@@ -132,7 +130,6 @@ async function handleCallbackQuery(callbackQuery) {
             'Content-Type': 'application/json'
           }
         });
-        console.log(`✅ Ответ сервера:`, response.data);
         console.log(`📤 Вывод ${id} подтверждён`);
       } catch (e) {
         console.error(`❌ Ошибка подтверждения вывода ${id}:`, e.response?.data || e.message);
@@ -140,7 +137,7 @@ async function handleCallbackQuery(callbackQuery) {
     } else if (action === 'reject') {
       try {
         console.log(`📤 Отправка rejectWithdraw для вывода ${id}`);
-        const response = await axios.post(API_URL, {
+        await axios.post(API_URL, {
           action: 'rejectWithdraw',
           withdraw_id: id,
           user_id: from.id.toString()
@@ -150,7 +147,6 @@ async function handleCallbackQuery(callbackQuery) {
             'Content-Type': 'application/json'
           }
         });
-        console.log(`✅ Ответ сервера:`, response.data);
         console.log(`❌ Вывод ${id} отклонён`);
       } catch (e) {
         console.error(`❌ Ошибка отклонения вывода ${id}:`, e.response?.data || e.message);
@@ -158,37 +154,41 @@ async function handleCallbackQuery(callbackQuery) {
     }
   }
 
-  // ОБРАБОТКА ЗАДАНИЙ
+  // ОБРАБОТКА ЗАДАНИЙ - ИСПРАВЛЕНО
   if (type === 'task') {
     if (action === 'approve') {
       try {
+        console.log(`📋 Отправка подтверждения задания ${id}`);
         await axios.post(API_URL, {
           action: 'approveTask',
-          task_id: id,
-          user_id: from.id
+          task_user_id: id,
+          user_id: from.id.toString()
         }, {
           headers: {
-            'x-bot-secret': TELEGRAM_BOT_TOKEN
+            'x-bot-secret': TELEGRAM_BOT_TOKEN,
+            'Content-Type': 'application/json'
           }
         });
         console.log(`📋 Задание ${id} подтверждено`);
       } catch (e) {
-        console.error(`❌ Ошибка подтверждения задания ${id}:`, e.message);
+        console.error(`❌ Ошибка подтверждения задания ${id}:`, e.response?.data || e.message);
       }
     } else if (action === 'reject') {
       try {
+        console.log(`📋 Отправка отклонения задания ${id}`);
         await axios.post(API_URL, {
           action: 'rejectTask',
-          task_id: id,
-          user_id: from.id
+          task_user_id: id,
+          user_id: from.id.toString()
         }, {
           headers: {
-            'x-bot-secret': TELEGRAM_BOT_TOKEN
+            'x-bot-secret': TELEGRAM_BOT_TOKEN,
+            'Content-Type': 'application/json'
           }
         });
         console.log(`❌ Задание ${id} отклонено`);
       } catch (e) {
-        console.error(`❌ Ошибка отклонения задания ${id}:`, e.message);
+        console.error(`❌ Ошибка отклонения задания ${id}:`, e.response?.data || e.message);
       }
     }
   }
