@@ -63,14 +63,14 @@ const userSchema = new mongoose.Schema({
   ton: { type: Number, default: 0 },
   gpu: { type: Number, default: 15 },
   friends: { type: Number, default: 0 },
-  referrerId: String,
+  referrerId: { type: String, default: null },
   isBanned: { type: Boolean, default: false },
   banReason: String,
   invitedFriends: [{ 
     friendId: String, 
     friendName: String, 
     date: String,
-    earnedGpu: { type: Number, default: 0 } // сколько GPU друг накопил
+    earnedGpu: { type: Number, default: 0 }
   }],
   lastMiningUpdate: { type: Date, default: Date.now },
   accumulatedTon: { type: Number, default: 0 },
@@ -162,9 +162,9 @@ const MINER_LIMITS = {
 
 // УСЛОВИЯ ДЛЯ РЕФЕРАЛЬНЫХ МАЙНЕРОВ
 const REFERRAL_MINER_REQUIREMENTS = {
-  friend: { requiredActive: 10, requiredEarned: 30 },  // 10 друзей, каждый накопил 30 GPU
-  bro: { requiredActive: 50, requiredEarned: 30 },     // 50 друзей, каждый накопил 30 GPU
-  nexus: { requiredActive: 150, requiredEarned: 30 }   // 150 друзей, каждый накопил 30 GPU
+  friend: { requiredActive: 10, requiredEarned: 30 },
+  bro: { requiredActive: 50, requiredEarned: 30 },
+  nexus: { requiredActive: 150, requiredEarned: 30 }
 };
 
 // ========== ПРОВЕРКА РЕФЕРАЛЬНЫХ МАЙНЕРОВ ==========
@@ -176,37 +176,28 @@ async function checkReferralMiners(userId) {
   
   let updated = false;
   
-  // Проверяем Friend Miner (10 активных друзей)
   if (activeFriendsCount >= 10 && !user.minerQuantities?.friend) {
     user.minerQuantities = user.minerQuantities || {};
     user.minerQuantities.friend = 1;
     updated = true;
     console.log(`🎁 ${userId}: получен Friend Miner (10 активных друзей)`);
-    await sendTelegramNotification(
-      `🎁 <b>Получен Friend Miner!</b>\nПользователь: <code>${userId}</code>\nУсловие: 10 друзей с 30+ GPU`
-    );
+    await sendTelegramNotification(`🎁 <b>Получен Friend Miner!</b>\nПользователь: <code>${userId}</code>`);
   }
   
-  // Проверяем Bro Miner (50 активных друзей)
   if (activeFriendsCount >= 50 && !user.minerQuantities?.bro) {
     user.minerQuantities = user.minerQuantities || {};
     user.minerQuantities.bro = 1;
     updated = true;
     console.log(`🎁 ${userId}: получен Bro Miner (50 активных друзей)`);
-    await sendTelegramNotification(
-      `🎁 <b>Получен Bro Miner!</b>\nПользователь: <code>${userId}</code>\nУсловие: 50 друзей с 30+ GPU`
-    );
+    await sendTelegramNotification(`🎁 <b>Получен Bro Miner!</b>\nПользователь: <code>${userId}</code>`);
   }
   
-  // Проверяем Nexus Miner (150 активных друзей)
   if (activeFriendsCount >= 150 && !user.minerQuantities?.nexus) {
     user.minerQuantities = user.minerQuantities || {};
     user.minerQuantities.nexus = 1;
     updated = true;
     console.log(`🎁 ${userId}: получен Nexus Miner (150 активных друзей)`);
-    await sendTelegramNotification(
-      `🎁 <b>Получен Nexus Miner!</b>\nПользователь: <code>${userId}</code>\nУсловие: 150 друзей с 30+ GPU`
-    );
+    await sendTelegramNotification(`🎁 <b>Получен Nexus Miner!</b>\nПользователь: <code>${userId}</code>`);
   }
   
   if (updated) {
@@ -254,29 +245,28 @@ async function calculateOffline(userId) {
 async function giveReferralCommission(userId, claimedTon, claimedGpu) {
   if (!claimedTon && !claimedGpu) return;
   
-  // Ищем того, кто пригласил этого пользователя
-  const referrer = await User.findOne({ "invitedFriends.friendId": userId });
-  if (!referrer) return;
+  const user = await User.findOne({ userId });
+  if (!user || !user.referrerId) return;
   
-  // 2% комиссия
+  const referrer = await User.findOne({ userId: user.referrerId });
+  if (!referrer || referrer.isBanned) return;
+  
   const commissionTon = claimedTon * 0.02;
   const commissionGpu = claimedGpu * 0.02;
   
   if (commissionTon > 0 || commissionGpu > 0) {
     referrer.ton += commissionTon;
     referrer.gpu += commissionGpu;
+    
+    const friend = referrer.invitedFriends.find(f => f.friendId === userId);
+    if (friend) {
+      friend.earnedGpu = (friend.earnedGpu || 0) + claimedGpu;
+    }
+    
     await referrer.save();
     
     console.log(`👥 Рефереру ${referrer.userId} начислено ${commissionTon.toFixed(6)} TON (+2%) и ${commissionGpu.toFixed(4)} GPU (+2%) за клейм ${userId}`);
     
-    // Обновляем earnedGpu друга
-    const friend = referrer.invitedFriends.find(f => f.friendId === userId);
-    if (friend) {
-      friend.earnedGpu = (friend.earnedGpu || 0) + claimedGpu;
-      await referrer.save();
-    }
-    
-    // Проверяем, не получил ли реферер новые реферальные майнеры
     await checkReferralMiners(referrer.userId);
   }
 }
@@ -349,7 +339,6 @@ app.post('/telegram/webhook', async (req, res) => {
             user.ton += task.rewardTon;
             user.gpu += task.rewardGpu;
             await user.save();
-            // Начисляем 2% комиссию рефереру за награду с задания
             await giveReferralCommission(userTask.userId, task.rewardTon, task.rewardGpu);
           }
           userTask.claimed = true;
@@ -381,66 +370,70 @@ app.post('/api/tg', async (req, res) => {
     const banned = await User.findOne({ userId: user_id, isBanned: true });
     if (banned) return res.status(403).json({ success: false, error: 'BANNED' });
 
-// РЕГИСТРАЦИЯ
-if (action === 'register') {
-  let user = await User.findOne({ userId: user_id });
-  
-  if (!user) {
-    user = new User({
-      userId: user_id,
-      name: name || 'Игрок',
-      minerQuantities: { basic: 1 }
-    });
-    await user.save();
-    
-    // ОБРАБОТКА РЕФЕРАЛА (только если ID разные и referrer_id существует)
-    if (referrer_id && referrer_id !== user_id && referrer_id !== 'null' && referrer_id !== 'undefined') {
-      const referrer = await User.findOne({ userId: referrer_id });
-      if (referrer && !referrer.isBanned) {
-        // Проверяем, не добавляли ли уже этого друга
-        const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === user_id);
-        if (!alreadyInvited) {
-          referrer.invitedFriends.push({
-            friendId: user_id,
-            friendName: name || user_id.slice(-5),
-            date: new Date().toLocaleDateString(),
-            earnedGpu: 0
-          });
-          referrer.friends = referrer.invitedFriends.length;
-          await referrer.save();
-          console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
+    // РЕГИСТРАЦИЯ
+    if (action === 'register') {
+      let user = await User.findOne({ userId: user_id });
+      
+      if (!user) {
+        user = new User({
+          userId: user_id,
+          name: name || 'Игрок',
+          minerQuantities: { basic: 1 },
+          referrerId: null
+        });
+        
+        // Обработка реферала
+        if (referrer_id && referrer_id !== user_id && referrer_id !== 'null' && referrer_id !== 'undefined') {
+          const referrer = await User.findOne({ userId: referrer_id });
+          if (referrer && !referrer.isBanned) {
+            // Сохраняем referrerId у нового пользователя
+            user.referrerId = referrer_id;
+            
+            // Добавляем друга в список пригласившего
+            const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === user_id);
+            if (!alreadyInvited) {
+              referrer.invitedFriends.push({
+                friendId: user_id,
+                friendName: name || user_id.slice(-5),
+                date: new Date().toLocaleDateString(),
+                earnedGpu: 0
+              });
+              referrer.friends = referrer.invitedFriends.length;
+              await referrer.save();
+              console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
+            }
+          }
         }
+        
+        await user.save();
+        console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
+        
+        await sendTelegramNotification(
+          `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
+        );
+      } else {
+        console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
+        await calculateOffline(user_id);
+        user = await User.findOne({ userId: user_id });
+        console.log(`📊 Накопления после входа: TON=${user.accumulatedTon.toFixed(8)}, GPU=${user.accumulatedGpu.toFixed(6)}`);
       }
+      
+      const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
+      
+      return res.json({
+        success: true,
+        data: {
+          ton: user.ton,
+          gpu: user.gpu,
+          friends: user.friends,
+          invitedFriends: user.invitedFriends || [],
+          accumulatedTon: user.accumulatedTon,
+          accumulatedGpu: user.accumulatedGpu,
+          minerQuantities: user.minerQuantities,
+          transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
+        }
+      });
     }
-    
-    console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
-    
-    await sendTelegramNotification(
-      `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
-    );
-  } else {
-    console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
-    await calculateOffline(user_id);
-    user = await User.findOne({ userId: user_id });
-    console.log(`📊 Накопления после входа: TON=${user.accumulatedTon.toFixed(8)}, GPU=${user.accumulatedGpu.toFixed(6)}`);
-  }
-  
-  const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
-  
-  return res.json({
-    success: true,
-    data: {
-      ton: user.ton,
-      gpu: user.gpu,
-      friends: user.friends,
-      invitedFriends: user.invitedFriends || [],
-      accumulatedTon: user.accumulatedTon,
-      accumulatedGpu: user.accumulatedGpu,
-      minerQuantities: user.minerQuantities,
-      transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
-    }
-  });
-}
 
     // СОХРАНЕНИЕ
     if (action === 'save') {
@@ -490,7 +483,6 @@ if (action === 'register') {
       user.accumulatedGpu = 0;
       await user.save();
       
-      // НАЧИСЛЯЕМ 2% РЕФЕРЕРУ
       await giveReferralCommission(user_id, rewardTon, rewardGpu);
       
       console.log(`🎁 ${user_id}: собрал награду +${rewardTon.toFixed(8)} TON, +${rewardGpu.toFixed(6)} GPU`);
@@ -707,7 +699,6 @@ app.post('/admin/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// API для админки
 app.get('/admin/api/users', async (req, res) => {
   const users = await User.find().sort({ createdAt: -1 }).limit(100);
   res.json(users);
@@ -765,7 +756,6 @@ app.post('/admin/api/user/unban', async (req, res) => {
   res.json({ success: true });
 });
 
-// Заявки
 app.get('/admin/api/deposits/pending', async (req, res) => {
   const deposits = await Deposit.find({ status: 'pending', type: 'deposit' }).sort('-createdAt');
   res.json(deposits);
@@ -805,7 +795,6 @@ app.post('/admin/api/withdraw/reject', async (req, res) => {
   res.json({ success: true });
 });
 
-// Задания (админ)
 app.get('/admin/api/tasks', async (req, res) => {
   const tasks = await Task.find().sort({ order: 1 });
   res.json(tasks);
@@ -827,7 +816,6 @@ app.post('/admin/api/tasks/delete', async (req, res) => {
   res.json({ success: true });
 });
 
-// Задания на подтверждение
 app.get('/admin/api/tasks/pending', async (req, res) => {
   const pending = await UserTask.find({ claimed: false });
   const result = [];
