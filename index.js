@@ -892,18 +892,19 @@ app.post('/admin/api/tasks/approve', async (req, res) => {
 const path = require('path');
 app.use(express.static(__dirname));
 
+// ✅ ИНИЦИАЛИЗАЦИЯ СЕССИЙ (ДО ПОДКЛЮЧЕНИЯ К БД)
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'secret123',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({ mongoUrl: process.env.MONGODB_URL }),
+  cookie: { maxAge: 24 * 60 * 60 * 1000 }
+}));
+
 const PORT = process.env.PORT || 8080;
 
 mongoose.connect(process.env.MONGODB_URL).then(async () => {
   console.log('✅ Connected to MongoDB');
-  
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'secret123',
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({ mongoUrl: process.env.MONGODB_URL }),
-    cookie: { maxAge: 24 * 60 * 60 * 1000 }
-  }));
   
   await ensureAdminExists();
 
