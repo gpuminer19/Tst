@@ -61,7 +61,21 @@ async function handleStart(chatId, userId, userName, text) {
     }
   }
 
-  const welcomeText = `🎮 *ДОБРО ПОЖАЛОВАТЬ В CRYPTOGPU, ${userName}!*\n\n👇 *Нажми на кнопку, чтобы начать!*`;
+  const welcomeText = `🌟 *Привет, ${userName}!* 🌟
+
+💎 Добро пожаловать в *CryptoGPU Miner*!
+
+🚀 *Твой стартовый бонус:*
+• Basic Miner (1 шт.)
+• 15 GPU токенов
+• 0.1 TON
+
+📈 *Как зарабатывать:*
+1️⃣ Покупай майнеры
+2️⃣ Собирай TON и GPU
+3️⃣ Выводи на кошелек
+
+👇 *Нажми на кнопку, чтобы начать игру!*`;
   await sendMessage(chatId, welcomeText, getGameKeyboard());
 }
 
@@ -154,7 +168,7 @@ async function handleCallbackQuery(callbackQuery) {
     }
   }
 
-  // ОБРАБОТКА ЗАДАНИЙ - ИСПРАВЛЕНО
+  // ОБРАБОТКА ЗАДАНИЙ
   if (type === 'task') {
     if (action === 'approve') {
       try {
