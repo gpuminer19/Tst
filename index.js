@@ -425,12 +425,12 @@ app.post('/api/tg', async (req, res) => {
     }
 
     if (action === 'createDeposit') {
-      const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'deposit' });
-      if (pendingCount >= 2) return res.status(400).json({ success: false, error: 'LIMIT_EXCEEDED' });
-      const deposit = new Deposit({ userId: user_id, userName: name, amount, wallet: process.env.TON_WALLET, comment: `DEPOSIT_${user_id}_${Date.now()}`, type: 'deposit' });
-      await deposit.save();
-      await sendTelegramNotification(`💎 <b>Заявка на пополнение!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON`, [[{ text: "✅ Подтвердить", callback_data: `approve:deposit:${deposit._id}` }, { text: "❌ Отклонить", callback_data: `reject:deposit:${deposit._id}` }]]);
-      return res.json({ success: true, deposit: { id: deposit._id, amount, wallet: process.env.TON_WALLET } });
+  const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'deposit' });
+  if (pendingCount >= 2) return res.status(400).json({ success: false, error: 'LIMIT_EXCEEDED' });
+  const deposit = new Deposit({ userId: user_id, userName: name, amount, wallet: process.env.TON_WALLET, comment: `DEPOSIT_${user_id}_${Date.now()}`, type: 'deposit' });
+  await deposit.save();
+  console.log(`💎 Создана заявка на пополнение ${deposit._id} от ${user_id} на сумму ${amount} TON`);
+  return res.json({ success: true, deposit: { id: deposit._id, amount, wallet: process.env.TON_WALLET } });
     }
 
     if (action === 'confirmDeposit') {
@@ -441,8 +441,12 @@ app.post('/api/tg', async (req, res) => {
   deposit.processedAt = new Date();
   deposit.processedBy = 'admin';
   await deposit.save();
+  
+  // Отправляем уведомление админу после подтверждения
+  await sendTelegramNotification(`✅ <b>Пополнение подтверждено!</b>\nПользователь: <code>${deposit.userId}</code>\nСумма: ${deposit.amount} TON зачислена.`);
+  
   return res.json({ success: true });
-}
+    }
 
 // ========== ОТКЛОНЕНИЕ ДЕПОЗИТА ==========
 if (action === 'rejectDeposit') {
@@ -452,6 +456,9 @@ if (action === 'rejectDeposit') {
   deposit.processedAt = new Date();
   deposit.processedBy = 'admin';
   await deposit.save();
+  
+  await sendTelegramNotification(`❌ <b>Пополнение отклонено!</b>\nПользователь: <code>${deposit.userId}</code>\nСумма: ${deposit.amount} TON`);
+  
   console.log(`❌ Депозит ${deposit_id} отклонён`);
   return res.json({ success: true });
 }
