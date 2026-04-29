@@ -306,31 +306,75 @@ app.post('/api/tg', async (req, res) => {
 
     // РЕГИСТРАЦИЯ
     if (action === 'register') {
-      let user = await User.findOne({ userId: user_id });
-      
-      if (!user) {
-        user = new User({
-          userId: user_id,
-          name: name || 'Игрок',
-          minerQuantities: { basic: 1 }
+  let user = await User.findOne({ userId: user_id });
+  
+  if (!user) {
+    user = new User({
+      userId: user_id,
+      name: name || 'Игрок',
+      minerQuantities: { basic: 1 }
+    });
+    await user.save(); // Сначала сохраняем нового пользователя
+    
+    // ========== ИСПРАВЛЕНИЕ РЕФЕРАЛЬНОЙ СИСТЕМЫ ==========
+    if (referrer_id && referrer_id !== user_id) {
+      const referrer = await User.findOne({ userId: referrer_id });
+      if (referrer && !referrer.isBanned) {
+        // Добавляем друга в список приглашенных
+        referrer.invitedFriends.push({
+          friendId: user_id,
+          friendName: name || user_id.slice(-5),
+          date: new Date().toLocaleDateString(),
+          earnedGpu: 0
         });
-        if (referrer_id && referrer_id !== user_id) {
-          const referrer = await User.findOne({ userId: referrer_id });
-          if (referrer) {
-            referrer.invitedFriends.push({
-              friendId: user_id,
-              friendName: name || user_id.slice(-5),
-              date: new Date().toLocaleDateString(),
-              earnedGpu: 0
-            });
-            referrer.friends = referrer.invitedFriends.length;
-            await referrer.save();
-            console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
-          }
-        }
-        await user.save();
-        console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
+        referrer.friends = referrer.invitedFriends.length;
         
+        // ========== НАЧИСЛЯЕМ БОНУС РЕФЕРЕРУ ==========
+        const REFERRAL_BONUS_GPU = 50;   // 50 GPU за регистрацию
+        const REFERRAL_BONUS_TON = 0.5;  // 0.5 TON за регистрацию
+        
+        referrer.gpu += REFERRAL_BONUS_GPU;
+        referrer.ton += REFERRAL_BONUS_TON;
+        
+        await referrer.save();
+        
+        console.log(`👥 Реферал ${referrer_id} получил бонус +${REFERRAL_BONUS_GPU} GPU, +${REFERRAL_BONUS_TON} TON за приглашение ${user_id}`);
+        
+        // Отправляем уведомление админу
+        await sendTelegramNotification(
+          `🎁 <b>Реферальный бонус!</b>\nРеферер: <code>${referrer_id}</code>\nНовый друг: <code>${user_id}</code>\nБонус: +${REFERRAL_BONUS_GPU} GPU, +${REFERRAL_BONUS_TON} TON`
+        );
+      }
+    }
+    
+    console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
+    
+    await sendTelegramNotification(
+      `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
+    );
+  } else {
+    console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
+    await calculateOffline(user_id);
+    user = await User.findOne({ userId: user_id });
+    console.log(`📊 Накопления после входа: TON=${user.accumulatedTon.toFixed(8)}, GPU=${user.accumulatedGpu.toFixed(6)}`);
+  }
+  
+  const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
+  
+  return res.json({
+    success: true,
+    data: {
+      ton: user.ton,
+      gpu: user.gpu,
+      friends: user.friends,
+      invitedFriends: user.invitedFriends || [],
+      accumulatedTon: user.accumulatedTon,
+      accumulatedGpu: user.accumulatedGpu,
+      minerQuantities: user.minerQuantities,
+      transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
+    }
+  });
+}
         await sendTelegramNotification(
           `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
         );
