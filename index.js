@@ -8,6 +8,14 @@ const axios = require('axios');
 
 dotenv.config();
 
+console.log('🔍 Проверка модулей:');
+try {
+  const sessionMod = require('express-session');
+  console.log('✅ express-session загружен');
+} catch(e) {
+  console.error('❌ express-session НЕ загружен:', e.message);
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
