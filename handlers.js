@@ -53,6 +53,10 @@ async function handleStart(chatId, userId, userName, text) {
         user_id: userId,
         referrer_id: referrerId,
         name: userName
+      }, {
+        headers: {
+          'x-bot-secret': TELEGRAM_BOT_TOKEN
+        }
       });
       console.log(`👥 Реферал зарегистрирован: ${referrerId} → ${userId}`);
     } catch (e) {
@@ -64,7 +68,7 @@ async function handleStart(chatId, userId, userName, text) {
   await sendMessage(chatId, welcomeText, getGameKeyboard());
 }
 
-// ========== ОБРАБОТЧИК CALLBACK-КНОПОК (ИСПРАВЛЕН) ==========
+// ========== ОБРАБОТЧИК CALLBACK-КНОПОК ==========
 async function handleCallbackQuery(callbackQuery) {
   const { data, message, from } = callbackQuery;
   const [action, type, id] = data.split(':');
@@ -84,6 +88,10 @@ async function handleCallbackQuery(callbackQuery) {
           action: 'confirmDeposit',
           deposit_id: id,
           user_id: from.id
+        }, {
+          headers: {
+            'x-bot-secret': TELEGRAM_BOT_TOKEN
+          }
         });
         console.log(`💎 Депозит ${id} подтверждён`);
       } catch (e) {
@@ -95,6 +103,10 @@ async function handleCallbackQuery(callbackQuery) {
           action: 'rejectDeposit',
           deposit_id: id,
           user_id: from.id
+        }, {
+          headers: {
+            'x-bot-secret': TELEGRAM_BOT_TOKEN
+          }
         });
         console.log(`❌ Депозит ${id} отклонён`);
       } catch (e) {
@@ -111,6 +123,10 @@ async function handleCallbackQuery(callbackQuery) {
           action: 'approveWithdraw',
           withdraw_id: id,
           user_id: from.id
+        }, {
+          headers: {
+            'x-bot-secret': TELEGRAM_BOT_TOKEN
+          }
         });
         console.log(`📤 Вывод ${id} подтверждён`);
       } catch (e) {
@@ -122,6 +138,10 @@ async function handleCallbackQuery(callbackQuery) {
           action: 'rejectWithdraw',
           withdraw_id: id,
           user_id: from.id
+        }, {
+          headers: {
+            'x-bot-secret': TELEGRAM_BOT_TOKEN
+          }
         });
         console.log(`❌ Вывод ${id} отклонён`);
       } catch (e) {
@@ -138,6 +158,10 @@ async function handleCallbackQuery(callbackQuery) {
           action: 'approveTask',
           task_id: id,
           user_id: from.id
+        }, {
+          headers: {
+            'x-bot-secret': TELEGRAM_BOT_TOKEN
+          }
         });
         console.log(`📋 Задание ${id} подтверждено`);
       } catch (e) {
@@ -149,6 +173,10 @@ async function handleCallbackQuery(callbackQuery) {
           action: 'rejectTask',
           task_id: id,
           user_id: from.id
+        }, {
+          headers: {
+            'x-bot-secret': TELEGRAM_BOT_TOKEN
+          }
         });
         console.log(`❌ Задание ${id} отклонено`);
       } catch (e) {
@@ -170,22 +198,18 @@ async function handleCallbackQuery(callbackQuery) {
 async function handleWebhook(reqBody) {
   const { message, callback_query } = reqBody;
 
-  // Обработка текстовых сообщений
   if (message && message.text) {
     const chatId = message.chat.id;
     const userId = message.from.id.toString();
     const userName = message.from.first_name || 'Игрок';
     const text = message.text;
-
     console.log(`📩 Сообщение: "${text}" от ${userName} (${userId})`);
-
     if (text.startsWith('/start')) {
       await handleStart(chatId, userId, userName, text);
     }
     return { success: true };
   }
 
-  // Обработка нажатий на кнопки
   if (callback_query) {
     await handleCallbackQuery(callback_query);
     return { success: true };
