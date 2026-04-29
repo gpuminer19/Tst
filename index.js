@@ -417,7 +417,7 @@ if (action === 'buy') {
   // Добавляем майнер
   user.minerQuantities = user.minerQuantities || {};
   user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
-  
+  user.markModified('minerQuantities');
   await user.save();
   
   console.log(`🟢 [ПОКУПКА] ПОСЛЕ покупки:`);
