@@ -297,7 +297,7 @@ app.post('/api/exchange', async (req, res) => {
 });
 
 app.post('/api/tg', async (req, res) => {
-  const { action, user_id, name, referrer_id, ton, gpu, friends, minerQuantities, amount, tonWallet, taskId, deposit_id, withdraw_id, minerId, quantity } = req.body;
+  const { action, user_id, name, referrer_id, ton, gpu, friends, minerQuantities, amount, tonWallet, taskId, deposit_id, withdraw_id, task_user_id, minerId, quantity } = req.body;
 
   try {
     if (req.verifiedUserId && req.verifiedUserId !== user_id) return res.status(403).json({ success: false, error: 'USER_ID_MISMATCH' });
@@ -389,14 +389,8 @@ app.post('/api/tg', async (req, res) => {
         return res.status(400).json({ success: false, error: 'LIMIT_EXCEEDED' });
       }
       
-      if (!amount || amount <= 0) {
+      if (!amount || amount <= 0 || amount < 1 || amount > 10000) {
         return res.status(400).json({ success: false, error: 'INVALID_AMOUNT' });
-      }
-      if (amount < 1) {
-        return res.status(400).json({ success: false, error: 'MIN_AMOUNT_1_TON' });
-      }
-      if (amount > 10000) {
-        return res.status(400).json({ success: false, error: 'MAX_AMOUNT_10000_TON' });
       }
       
       const deposit = new Deposit({ 
@@ -474,14 +468,8 @@ app.post('/api/tg', async (req, res) => {
 
     // ========== СОЗДАНИЕ ВЫВОДА ==========
     if (action === 'createWithdraw') {
-      if (!amount || amount <= 0) {
+      if (!amount || amount <= 0 || amount < 5 || amount > 5000) {
         return res.json({ success: false, error: 'INVALID_AMOUNT' });
-      }
-      if (amount < 5) {
-        return res.json({ success: false, error: 'MIN_WITHDRAW_5_TON' });
-      }
-      if (amount > 5000) {
-        return res.json({ success: false, error: 'MAX_WITHDRAW_5000_TON' });
       }
       if (!tonWallet || tonWallet.length < 10) {
         return res.json({ success: false, error: 'INVALID_WALLET' });
@@ -493,10 +481,7 @@ app.post('/api/tg', async (req, res) => {
       }
       
       const user = await User.findOne({ userId: user_id });
-      if (!user) {
-        return res.json({ success: false, error: 'USER_NOT_FOUND' });
-      }
-      if (user.ton < amount) {
+      if (!user || user.ton < amount) {
         return res.json({ success: false, error: 'INSUFFICIENT_BALANCE' });
       }
       
@@ -524,7 +509,6 @@ app.post('/api/tg', async (req, res) => {
         `💰 <b>Сумма:</b> ${amount} TON\n` +
         `💳 <b>Кошелёк:</b> <code>${tonWallet}</code>\n` +
         `🆔 <b>ID заявки:</b> <code>${withdraw._id}</code>\n` +
-        `🕐 <b>Время:</b> ${new Date().toLocaleString()}\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `⬇️ <b>Действия:</b>`;
       
@@ -552,18 +536,8 @@ app.post('/api/tg', async (req, res) => {
       console.log(`📤 Получен запрос на подтверждение вывода: ${withdraw_id}`);
       
       const withdraw = await Deposit.findById(withdraw_id);
-      if (!withdraw) {
-        console.log(`❌ Вывод ${withdraw_id} не найден`);
-        return res.json({ success: false, error: 'WITHDRAW_NOT_FOUND' });
-      }
-      if (withdraw.status !== 'pending') {
-        console.log(`❌ Вывод ${withdraw_id} уже обработан (статус: ${withdraw.status})`);
-        return res.json({ success: false, error: 'ALREADY_PROCESSED' });
-      }
-      if (withdraw.type !== 'withdraw') {
-        console.log(`❌ Заявка ${withdraw_id} не является выводом`);
-        return res.json({ success: false, error: 'NOT_WITHDRAW' });
-      }
+      if (!withdraw || withdraw.status !== 'pending') return res.json({ success: false });
+      if (withdraw.type !== 'withdraw') return res.json({ success: false });
       
       withdraw.status = 'completed';
       withdraw.processedAt = new Date();
@@ -571,12 +545,12 @@ app.post('/api/tg', async (req, res) => {
       await withdraw.save();
       
       await sendTelegramNotification(
-        `✅ <b>Ваш вывод подтверждён!</b>\n💰 Сумма: ${withdraw.amount} TON\n💳 Кошелёк: <code>${withdraw.wallet}</code>`,
+        `✅ <b>Ваш вывод подтверждён!</b>\n💰 Сумма: ${withdraw.amount} TON`,
         null,
         withdraw.userId
       );
       
-      console.log(`✅ Вывод ${withdraw_id} подтверждён, сумма ${withdraw.amount} TON`);
+      console.log(`✅ Вывод ${withdraw_id} подтверждён`);
       return res.json({ success: true });
     }
 
@@ -585,25 +559,14 @@ app.post('/api/tg', async (req, res) => {
       console.log(`📤 Получен запрос на отклонение вывода: ${withdraw_id}`);
       
       const withdraw = await Deposit.findById(withdraw_id);
-      if (!withdraw) {
-        console.log(`❌ Вывод ${withdraw_id} не найден`);
-        return res.json({ success: false, error: 'WITHDRAW_NOT_FOUND' });
-      }
-      if (withdraw.status !== 'pending') {
-        console.log(`❌ Вывод ${withdraw_id} уже обработан (статус: ${withdraw.status})`);
-        return res.json({ success: false, error: 'ALREADY_PROCESSED' });
-      }
-      if (withdraw.type !== 'withdraw') {
-        console.log(`❌ Заявка ${withdraw_id} не является выводом`);
-        return res.json({ success: false, error: 'NOT_WITHDRAW' });
-      }
+      if (!withdraw || withdraw.status !== 'pending') return res.json({ success: false });
+      if (withdraw.type !== 'withdraw') return res.json({ success: false });
       
       const user = await User.findOne({ userId: withdraw.userId });
       if (user) {
         user.ton += withdraw.amount;
         user.totalWithdrawn = Math.max(0, (user.totalWithdrawn || 0) - withdraw.amount);
         await user.save();
-        console.log(`💰 Баланс пользователя ${withdraw.userId} пополнен на ${withdraw.amount} TON`);
       }
       
       withdraw.status = 'cancelled';
@@ -612,15 +575,16 @@ app.post('/api/tg', async (req, res) => {
       await withdraw.save();
       
       await sendTelegramNotification(
-        `❌ <b>Ваш вывод отклонён!</b>\n💰 Сумма: ${withdraw.amount} TON\n⚠️ Средства возвращены на ваш баланс.`,
+        `❌ <b>Ваш вывод отклонён!</b>\n💰 Сумма: ${withdraw.amount} TON возвращена на баланс.`,
         null,
         withdraw.userId
       );
       
-      console.log(`❌ Вывод ${withdraw_id} отклонён, баланс возвращён`);
+      console.log(`❌ Вывод ${withdraw_id} отклонён`);
       return res.json({ success: true });
     }
 
+    // ========== ЗАДАНИЯ ==========
     if (action === 'tasks/list') {
       const tasks = await Task.find({ isActive: true }).sort({ order: 1 });
       const completed = await UserTask.find({ userId: user_id, claimed: true });
@@ -640,6 +604,65 @@ app.post('/api/tg', async (req, res) => {
       await userTask.save();
       const user = await User.findOne({ userId: user_id });
       await sendTelegramNotification(`📋 <b>Новое выполненное задание!</b>\n👤 Пользователь: <code>${user_id}</code> (${user?.name || 'Игрок'})\n📌 Задание: ${task.title}\n🎁 Награда: +${task.rewardTon} TON, +${task.rewardGpu} GPU`, [[{ text: "✅ Подтвердить", callback_data: `approve:task:${userTask._id}` }, { text: "❌ Отклонить", callback_data: `reject:task:${userTask._id}` }]]);
+      return res.json({ success: true });
+    }
+
+    // ========== ПОДТВЕРЖДЕНИЕ ЗАДАНИЯ ==========
+    if (action === 'approveTask') {
+      console.log(`📋 Получен запрос на подтверждение задания: ${task_user_id}`);
+      
+      const userTask = await UserTask.findById(task_user_id);
+      if (!userTask) {
+        return res.json({ success: false, error: 'TASK_NOT_FOUND' });
+      }
+      if (userTask.claimed) {
+        return res.json({ success: false, error: 'ALREADY_CLAIMED' });
+      }
+      
+      const task = await Task.findOne({ id: userTask.taskId });
+      const user = await User.findOne({ userId: userTask.userId });
+      
+      if (user && task) {
+        user.ton += task.rewardTon;
+        user.gpu += task.rewardGpu;
+        await user.save();
+        await giveReferralCommission(userTask.userId, task.rewardTon, task.rewardGpu);
+        console.log(`✅ Пользователю ${userTask.userId} начислено +${task.rewardTon} TON и +${task.rewardGpu} GPU за задание ${task.title}`);
+      }
+      
+      userTask.claimed = true;
+      await userTask.save();
+      
+      await sendTelegramNotification(
+        `✅ <b>Задание выполнено!</b>\n📌 Задание: ${task?.title || 'Задание'}\n🎁 Награда: +${task?.rewardTon || 0} TON, +${task?.rewardGpu || 0} GPU`,
+        null,
+        userTask.userId
+      );
+      
+      return res.json({ success: true });
+    }
+
+    // ========== ОТКЛОНЕНИЕ ЗАДАНИЯ ==========
+    if (action === 'rejectTask') {
+      console.log(`📋 Получен запрос на отклонение задания: ${task_user_id}`);
+      
+      const userTask = await UserTask.findById(task_user_id);
+      if (!userTask) {
+        return res.json({ success: false, error: 'TASK_NOT_FOUND' });
+      }
+      if (userTask.claimed) {
+        return res.json({ success: false, error: 'ALREADY_PROCESSED' });
+      }
+      
+      await UserTask.findByIdAndDelete(task_user_id);
+      
+      await sendTelegramNotification(
+        `❌ <b>Задание отклонено!</b>\n📌 Попробуйте выполнить задание заново.`,
+        null,
+        userTask.userId
+      );
+      
+      console.log(`❌ Задание ${task_user_id} отклонено, запись удалена`);
       return res.json({ success: true });
     }
 
