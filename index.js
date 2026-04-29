@@ -184,16 +184,18 @@ function verifyTelegramInitData(initData) {
 
 // ========== MIDDLEWARE ПРОВЕРКИ ПОДПИСИ ==========
 app.use('/api/tg', (req, res, next) => {
-  // Пропускаем проверку для админ-действий от бота
-  const adminActions = ['confirmDeposit', 'rejectDeposit', 'approveWithdraw', 'rejectWithdraw', 'approveTask', 'rejectTask'];
-  if (adminActions.includes(req.body.action)) {
-    return next();
+  // Проверяем, не идёт ли запрос от самого бота (по секретному ключу)
+  const botSecret = req.headers['x-bot-secret'];
+  if (botSecret && botSecret === process.env.TELEGRAM_BOT_TOKEN) {
+    return next(); // Пропускаем проверку для бота
   }
   
+  // Для обычных пользователей — проверяем initData
   const initData = req.headers['x-telegram-init-data'];
   if (!initData && process.env.NODE_ENV !== 'production') return next();
   if (!initData) return res.status(401).json({ success: false, error: 'Unauthorized' });
   if (!verifyTelegramInitData(initData)) return res.status(403).json({ success: false, error: 'Forbidden' });
+  
   const urlParams = new URLSearchParams(initData);
   const userParam = urlParams.get('user');
   if (userParam) {
