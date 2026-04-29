@@ -29,12 +29,15 @@ app.use(session({
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 
-async function sendTelegramNotification(text, buttons = null) {
-  if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) return;
+async function sendTelegramNotification(text, buttons = null, userId = null) {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  
+  const chatId = userId || ADMIN_CHAT_ID;
+  if (!chatId) return;
   
   try {
     const payload = {
-      chat_id: ADMIN_CHAT_ID,
+      chat_id: chatId,
       text: text,
       parse_mode: 'HTML'
     };
@@ -184,13 +187,11 @@ function verifyTelegramInitData(initData) {
 
 // ========== MIDDLEWARE ПРОВЕРКИ ПОДПИСИ ==========
 app.use('/api/tg', (req, res, next) => {
-  // Проверяем, не идёт ли запрос от самого бота (по секретному ключу)
   const botSecret = req.headers['x-bot-secret'];
   if (botSecret && botSecret === process.env.TELEGRAM_BOT_TOKEN) {
-    return next(); // Пропускаем проверку для бота
+    return next();
   }
   
-  // Для обычных пользователей — проверяем initData
   const initData = req.headers['x-telegram-init-data'];
   if (!initData && process.env.NODE_ENV !== 'production') return next();
   if (!initData) return res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -234,7 +235,6 @@ async function calculateOffline(userId) {
   }
   user.lastMiningUpdate = now;
   await user.save();
-  console.log(`📊 ${userId}: офлайн-накоплено +${earnedTon.toFixed(8)} TON`);
 }
 
 async function giveReferralCommission(userId, claimedTon, claimedGpu) {
@@ -251,37 +251,7 @@ async function giveReferralCommission(userId, claimedTon, claimedGpu) {
     const friend = referrer.invitedFriends.find(f => f.friendId === userId);
     if (friend) friend.earnedGpu = (friend.earnedGpu || 0) + claimedGpu;
     await referrer.save();
-    console.log(`👥 Рефереру ${referrer.userId} начислено +${commissionTon.toFixed(6)} TON`);
   }
-}
-
-async function checkReferralMiners(userId) {
-  const user = await User.findOne({ userId });
-  if (!user) return;
-  const activeFriendsCount = user.invitedFriends.filter(f => (f.earnedGpu || 0) >= 30).length;
-  let updated = false;
-  if (activeFriendsCount >= 10 && !user.minerQuantities?.friend) {
-    user.minerQuantities = user.minerQuantities || {};
-    user.minerQuantities.friend = 1;
-    updated = true;
-    console.log(`🎁 ${userId}: получен Friend Miner`);
-    await sendTelegramNotification(`🎁 <b>Получен Friend Miner!</b>\nПользователь: <code>${userId}</code>`);
-  }
-  if (activeFriendsCount >= 50 && !user.minerQuantities?.bro) {
-    user.minerQuantities = user.minerQuantities || {};
-    user.minerQuantities.bro = 1;
-    updated = true;
-    console.log(`🎁 ${userId}: получен Bro Miner`);
-    await sendTelegramNotification(`🎁 <b>Получен Bro Miner!</b>\nПользователь: <code>${userId}</code>`);
-  }
-  if (activeFriendsCount >= 150 && !user.minerQuantities?.nexus) {
-    user.minerQuantities = user.minerQuantities || {};
-    user.minerQuantities.nexus = 1;
-    updated = true;
-    console.log(`🎁 ${userId}: получен Nexus Miner`);
-    await sendTelegramNotification(`🎁 <b>Получен Nexus Miner!</b>\nПользователь: <code>${userId}</code>`);
-  }
-  if (updated) await user.save();
 }
 
 async function ensureAdminExists() {
@@ -294,7 +264,7 @@ async function ensureAdminExists() {
   }
 }
 
-// ========== TELEGRAM WEBHOOK (вынесен в handlers.js) ==========
+// ========== TELEGRAM WEBHOOK ==========
 app.post('/telegram/webhook', async (req, res) => {
   try {
     await handleWebhook(req.body);
@@ -319,7 +289,6 @@ app.post('/api/exchange', async (req, res) => {
     user.gpu -= amount;
     user.ton += tonReceived;
     await user.save();
-    console.log(`🔄 ${user_id}: продал ${amount} GPU за ${tonReceived} TON`);
     res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, tonReceived } });
   } catch (error) {
     console.error('Exchange error:', error);
@@ -328,7 +297,7 @@ app.post('/api/exchange', async (req, res) => {
 });
 
 app.post('/api/tg', async (req, res) => {
-  const { action, user_id, name, referrer_id, ton, gpu, friends, minerQuantities, amount, tonWallet, taskId, deposit_id, minerId, quantity } = req.body;
+  const { action, user_id, name, referrer_id, ton, gpu, friends, minerQuantities, amount, tonWallet, taskId, deposit_id, withdraw_id, minerId, quantity } = req.body;
 
   try {
     if (req.verifiedUserId && req.verifiedUserId !== user_id) return res.status(403).json({ success: false, error: 'USER_ID_MISMATCH' });
@@ -336,7 +305,6 @@ app.post('/api/tg', async (req, res) => {
     if (banned) return res.status(403).json({ success: false, error: 'BANNED' });
 
     if (action === 'register') {
-      if (!checkRateLimit(user_id, 'register', 5000, 3)) return res.status(429).json({ success: false, error: 'TOO_MANY_REQUESTS' });
       let user = await User.findOne({ userId: user_id });
       if (!user) {
         user = new User({ userId: user_id, name: req.verifiedUserName || name || 'Игрок', minerQuantities: { basic: 1 }, referrerId: null });
@@ -349,15 +317,12 @@ app.post('/api/tg', async (req, res) => {
               referrer.invitedFriends.push({ friendId: user_id, friendName: name || user_id.slice(-5), date: new Date().toLocaleDateString(), earnedGpu: 0 });
               referrer.friends = referrer.invitedFriends.length;
               await referrer.save();
-              console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
             }
           }
         }
         await user.save();
-        console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
         await sendTelegramNotification(`🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`);
       } else {
-        console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
         await calculateOffline(user_id);
         user = await User.findOne({ userId: user_id });
       }
@@ -371,13 +336,10 @@ app.post('/api/tg', async (req, res) => {
       const updateData = { friends, lastSeen: new Date() };
       if (minerQuantities && Object.keys(minerQuantities).length > 0) updateData.minerQuantities = minerQuantities;
       await User.findOneAndUpdate({ userId: user_id }, updateData, { upsert: false });
-      console.log(`💾 Сохранено состояние для ${user_id}`);
       return res.json({ success: true });
     }
 
     if (action === 'claim') {
-      if (!checkRateLimit(user_id, 'claim', 1000, 2)) return res.json({ success: false, error: "TOO_FAST" });
-      if (!checkClaimRateLimit(user_id)) return res.json({ success: false, error: "CLAIM_COOLDOWN" });
       await calculateOffline(user_id);
       const user = await User.findOne({ userId: user_id });
       if (!user) return res.json({ success: false, error: "User not found" });
@@ -390,12 +352,10 @@ app.post('/api/tg', async (req, res) => {
       user.accumulatedGpu = 0;
       await user.save();
       await giveReferralCommission(user_id, rewardTon, rewardGpu);
-      console.log(`🎁 ${user_id}: собрал награду +${rewardTon.toFixed(8)} TON`);
       return res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, accumulatedTon: 0, accumulatedGpu: 0 } });
     }
 
     if (action === 'buy') {
-      if (!checkRateLimit(user_id, 'buy', 2000, 3)) return res.json({ success: false, error: "TOO_FAST" });
       if (!minerId) return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
       const price = MINER_PRICES[minerId];
       const limit = MINER_LIMITS[minerId];
@@ -414,199 +374,252 @@ app.post('/api/tg', async (req, res) => {
       user.minerQuantities = user.minerQuantities || {};
       user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
       await user.save();
-      console.log(`⛏️ ${user_id}: купил ${buyQuantity} x ${minerId}`);
       return res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, minerQuantities: user.minerQuantities } });
     }
 
     if (action === 'getReferrals') {
-      if (!checkRateLimit(user_id, 'getReferrals', 5000, 10)) return res.status(429).json({ success: false, error: "TOO_MANY_REQUESTS" });
       const user = await User.findOne({ userId: user_id });
       return res.json({ success: true, referrals: user?.invitedFriends || [] });
     }
 
+    // ========== СОЗДАНИЕ ДЕПОЗИТА ==========
     if (action === 'createDeposit') {
-  // Проверка на лимит ожидающих заявок (не больше 2)
-  const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'deposit' });
-  if (pendingCount >= 2) {
-    return res.status(400).json({ success: false, error: 'LIMIT_EXCEEDED' });
-  }
-  
-  // Проверка суммы
-  if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, error: 'INVALID_AMOUNT' });
-  }
-  if (amount < 1) {
-    return res.status(400).json({ success: false, error: 'MIN_AMOUNT_1_TON' });
-  }
-  if (amount > 10000) {
-    return res.status(400).json({ success: false, error: 'MAX_AMOUNT_10000_TON' });
-  }
-  
-  // Создаём заявку в базе данных
-  const deposit = new Deposit({ 
-    userId: user_id, 
-    userName: name || 'Игрок', 
-    amount: Number(amount), 
-    wallet: process.env.TON_WALLET || 'EQD...ваш_кошелек', 
-    comment: `DEPOSIT_${user_id}_${Date.now()}`,
-    type: 'deposit',
-    status: 'pending',
-    createdAt: new Date()
-  });
-  await deposit.save();
-  
-  // Отправка в Telegram администратору
-  const adminMessage = 
-    `💎 <b>НОВАЯ ЗАЯВКА НА ПОПОЛНЕНИЕ</b>\n` +
-    `━━━━━━━━━━━━━━━━━━━━\n` +
-    `👤 <b>Пользователь:</b> <code>${user_id}</code>\n` +
-    `📛 <b>Имя:</b> ${name || 'Игрок'}\n` +
-    `💰 <b>Сумма:</b> ${amount} TON\n` +
-    `🆔 <b>ID заявки:</b> <code>${deposit._id}</code>\n` +
-    `🕐 <b>Время:</b> ${new Date().toLocaleString()}\n` +
-    `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⬇️ <b>Действия:</b>`;
-  
-  const keyboard = [[
-    { text: "✅ ПОДТВЕРДИТЬ", callback_data: `approve:deposit:${deposit._id}` },
-    { text: "❌ ОТКЛОНИТЬ", callback_data: `reject:deposit:${deposit._id}` }
-  ]];
-  
-  await sendTelegramNotification(adminMessage, keyboard);
-  
-  console.log(`💎 [${new Date().toISOString()}] Новая заявка: ${deposit._id} | User: ${user_id} | Amount: ${amount} TON`);
-  
-  return res.json({ 
-    success: true, 
-    deposit: { 
-      id: deposit._id, 
-      amount: Number(amount), 
-      wallet: process.env.TON_WALLET || 'EQD...ваш_кошелек',
-      comment: deposit.comment,
-      status: 'pending'
-    } 
-  });
-}
-
-    if (action === 'confirmDeposit') {
-  const deposit = await Deposit.findById(deposit_id);
-  if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
-  await User.updateOne({ userId: deposit.userId }, { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } });
-  deposit.status = 'completed';
-  deposit.processedAt = new Date();
-  deposit.processedBy = 'admin';
-  await deposit.save();
-  
-  // Отправляем уведомление админу после подтверждения
-  await sendTelegramNotification(`✅ <b>Пополнение подтверждено!</b>\nПользователь: <code>${deposit.userId}</code>\nСумма: ${deposit.amount} TON зачислена.`);
-  
-  return res.json({ success: true });
+      const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'deposit' });
+      if (pendingCount >= 2) {
+        return res.status(400).json({ success: false, error: 'LIMIT_EXCEEDED' });
+      }
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ success: false, error: 'INVALID_AMOUNT' });
+      }
+      if (amount < 1) {
+        return res.status(400).json({ success: false, error: 'MIN_AMOUNT_1_TON' });
+      }
+      if (amount > 10000) {
+        return res.status(400).json({ success: false, error: 'MAX_AMOUNT_10000_TON' });
+      }
+      
+      const deposit = new Deposit({ 
+        userId: user_id, 
+        userName: name || 'Игрок', 
+        amount: Number(amount), 
+        wallet: process.env.TON_WALLET || 'EQD...ваш_кошелек', 
+        comment: `DEPOSIT_${user_id}_${Date.now()}`,
+        type: 'deposit',
+        status: 'pending',
+        createdAt: new Date()
+      });
+      await deposit.save();
+      
+      const adminMessage = 
+        `💎 <b>НОВАЯ ЗАЯВКА НА ПОПОЛНЕНИЕ</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 <b>Пользователь:</b> <code>${user_id}</code>\n` +
+        `📛 <b>Имя:</b> ${name || 'Игрок'}\n` +
+        `💰 <b>Сумма:</b> ${amount} TON\n` +
+        `🆔 <b>ID заявки:</b> <code>${deposit._id}</code>\n` +
+        `🕐 <b>Время:</b> ${new Date().toLocaleString()}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⬇️ <b>Действия:</b>`;
+      
+      const keyboard = [[
+        { text: "✅ ПОДТВЕРДИТЬ", callback_data: `approve:deposit:${deposit._id}` },
+        { text: "❌ ОТКЛОНИТЬ", callback_data: `reject:deposit:${deposit._id}` }
+      ]];
+      
+      await sendTelegramNotification(adminMessage, keyboard);
+      console.log(`💎 Новая заявка на пополнение: ${deposit._id} от ${user_id} на сумму ${amount} TON`);
+      
+      return res.json({ 
+        success: true, 
+        deposit: { 
+          id: deposit._id, 
+          amount: Number(amount), 
+          wallet: process.env.TON_WALLET || 'EQD...ваш_кошелек',
+          comment: deposit.comment,
+          status: 'pending'
+        } 
+      });
     }
 
-// ========== ОТКЛОНЕНИЕ ДЕПОЗИТА ==========
-if (action === 'rejectDeposit') {
-  const deposit = await Deposit.findById(deposit_id);
-  if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
-  deposit.status = 'cancelled';
-  deposit.processedAt = new Date();
-  deposit.processedBy = 'admin';
-  await deposit.save();
-  
-  await sendTelegramNotification(`❌ <b>Пополнение отклонено!</b>\nПользователь: <code>${deposit.userId}</code>\nСумма: ${deposit.amount} TON`);
-  
-  console.log(`❌ Депозит ${deposit_id} отклонён`);
-  return res.json({ success: true });
-}
+    // ========== ПОДТВЕРЖДЕНИЕ ДЕПОЗИТА ==========
+    if (action === 'confirmDeposit') {
+      const deposit = await Deposit.findById(deposit_id);
+      if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
+      await User.updateOne({ userId: deposit.userId }, { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } });
+      deposit.status = 'completed';
+      deposit.processedAt = new Date();
+      deposit.processedBy = 'admin';
+      await deposit.save();
+      
+      await sendTelegramNotification(`✅ <b>Пополнение подтверждено!</b>\nПользователь: <code>${deposit.userId}</code>\nСумма: ${deposit.amount} TON зачислена.`);
+      
+      return res.json({ success: true });
+    }
 
-if (action === 'createWithdraw') {
-  // ========== ПРОВЕРКИ ==========
-  // Проверка наличия суммы
-  if (!amount || amount <= 0) {
-    return res.json({ success: false, error: 'INVALID_AMOUNT' });
-  }
-  
-  // Проверка минимальной суммы вывода
-  if (amount < 1) {
-    return res.json({ success: false, error: 'MIN_WITHDRAW_5_TON' });
-  }
-  
-  // Проверка максимальной суммы вывода
-  if (amount > 5000) {
-    return res.json({ success: false, error: 'MAX_WITHDRAW_5000_TON' });
-  }
-  
-  // Проверка наличия кошелька
-  if (!tonWallet || tonWallet.length < 10) {
-    return res.json({ success: false, error: 'INVALID_WALLET' });
-  }
-  
-  // Проверка лимита ожидающих заявок (не больше 2)
-  const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'withdraw' });
-  if (pendingCount >= 2) {
-    return res.json({ success: false, error: 'LIMIT_EXCEEDED' });
-  }
-  
-  // Получаем пользователя и проверяем баланс
-  const user = await User.findOne({ userId: user_id });
-  if (!user) {
-    return res.json({ success: false, error: 'USER_NOT_FOUND' });
-  }
-  
-  if (user.ton < amount) {
-    return res.json({ success: false, error: 'INSUFFICIENT_BALANCE' });
-  }
-  
-  // ========== СПИСЫВАЕМ БАЛАНС ==========
-  user.ton -= amount;
-  user.totalWithdrawn = (user.totalWithdrawn || 0) + amount;
-  await user.save();
-  
-  // ========== СОЗДАЁМ ЗАЯВКУ ==========
-  const withdraw = new Deposit({ 
-    userId: user_id, 
-    userName: name || 'Игрок', 
-    amount: Number(amount), 
-    wallet: tonWallet,
-    comment: `WITHDRAW_${user_id}_${Date.now()}`,
-    type: 'withdraw',
-    status: 'pending',
-    createdAt: new Date()
-  });
-  await withdraw.save();
-  
-  // ========== ОТПРАВКА В TELEGRAM АДМИНИСТРАТОРУ ==========
-  const adminMessage = 
-    `📤 <b>НОВАЯ ЗАЯВКА НА ВЫВОД</b>\n` +
-    `━━━━━━━━━━━━━━━━━━━━\n` +
-    `👤 <b>Пользователь:</b> <code>${user_id}</code>\n` +
-    `📛 <b>Имя:</b> ${name || 'Игрок'}\n` +
-    `💰 <b>Сумма:</b> ${amount} TON\n` +
-    `💳 <b>Кошелёк:</b> <code>${tonWallet}</code>\n` +
-    `🆔 <b>ID заявки:</b> <code>${withdraw._id}</code>\n` +
-    `🕐 <b>Время:</b> ${new Date().toLocaleString()}\n` +
-    `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⬇️ <b>Действия:</b>`;
-  
-  const keyboard = [[
-    { text: "✅ ПОДТВЕРДИТЬ", callback_data: `approve:withdraw:${withdraw._id}` },
-    { text: "❌ ОТКЛОНИТЬ", callback_data: `reject:withdraw:${withdraw._id}` }
-  ]];
-  
-  await sendTelegramNotification(adminMessage, keyboard);
-  
-  console.log(`📤 [${new Date().toISOString()}] Новая заявка на вывод: ${withdraw._id} | User: ${user_id} | Amount: ${amount} TON | Wallet: ${tonWallet}`);
-  
-  // ========== ВОЗВРАТ ОТВЕТА ==========
-  return res.json({ 
-    success: true, 
-    withdraw: { 
-      id: withdraw._id, 
-      amount: Number(amount), 
-      wallet: tonWallet,
-      status: 'pending'
-    } 
-  });
-}
+    // ========== ОТКЛОНЕНИЕ ДЕПОЗИТА ==========
+    if (action === 'rejectDeposit') {
+      const deposit = await Deposit.findById(deposit_id);
+      if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
+      deposit.status = 'cancelled';
+      deposit.processedAt = new Date();
+      deposit.processedBy = 'admin';
+      await deposit.save();
+      
+      await sendTelegramNotification(`❌ <b>Пополнение отклонено!</b>\nПользователь: <code>${deposit.userId}</code>\nСумма: ${deposit.amount} TON`);
+      
+      console.log(`❌ Депозит ${deposit_id} отклонён`);
+      return res.json({ success: true });
+    }
+
+    // ========== СОЗДАНИЕ ВЫВОДА ==========
+    if (action === 'createWithdraw') {
+      if (!amount || amount <= 0) {
+        return res.json({ success: false, error: 'INVALID_AMOUNT' });
+      }
+      if (amount < 5) {
+        return res.json({ success: false, error: 'MIN_WITHDRAW_5_TON' });
+      }
+      if (amount > 5000) {
+        return res.json({ success: false, error: 'MAX_WITHDRAW_5000_TON' });
+      }
+      if (!tonWallet || tonWallet.length < 10) {
+        return res.json({ success: false, error: 'INVALID_WALLET' });
+      }
+      
+      const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'withdraw' });
+      if (pendingCount >= 2) {
+        return res.json({ success: false, error: 'LIMIT_EXCEEDED' });
+      }
+      
+      const user = await User.findOne({ userId: user_id });
+      if (!user) {
+        return res.json({ success: false, error: 'USER_NOT_FOUND' });
+      }
+      if (user.ton < amount) {
+        return res.json({ success: false, error: 'INSUFFICIENT_BALANCE' });
+      }
+      
+      user.ton -= amount;
+      user.totalWithdrawn = (user.totalWithdrawn || 0) + amount;
+      await user.save();
+      
+      const withdraw = new Deposit({ 
+        userId: user_id, 
+        userName: name || 'Игрок', 
+        amount: Number(amount), 
+        wallet: tonWallet,
+        comment: `WITHDRAW_${user_id}_${Date.now()}`,
+        type: 'withdraw',
+        status: 'pending',
+        createdAt: new Date()
+      });
+      await withdraw.save();
+      
+      const adminMessage = 
+        `📤 <b>НОВАЯ ЗАЯВКА НА ВЫВОД</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 <b>Пользователь:</b> <code>${user_id}</code>\n` +
+        `📛 <b>Имя:</b> ${name || 'Игрок'}\n` +
+        `💰 <b>Сумма:</b> ${amount} TON\n` +
+        `💳 <b>Кошелёк:</b> <code>${tonWallet}</code>\n` +
+        `🆔 <b>ID заявки:</b> <code>${withdraw._id}</code>\n` +
+        `🕐 <b>Время:</b> ${new Date().toLocaleString()}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⬇️ <b>Действия:</b>`;
+      
+      const keyboard = [[
+        { text: "✅ ПОДТВЕРДИТЬ", callback_data: `approve:withdraw:${withdraw._id}` },
+        { text: "❌ ОТКЛОНИТЬ", callback_data: `reject:withdraw:${withdraw._id}` }
+      ]];
+      
+      await sendTelegramNotification(adminMessage, keyboard);
+      console.log(`📤 Новая заявка на вывод: ${withdraw._id} от ${user_id} на сумму ${amount} TON`);
+      
+      return res.json({ 
+        success: true, 
+        withdraw: { 
+          id: withdraw._id, 
+          amount: Number(amount), 
+          wallet: tonWallet,
+          status: 'pending'
+        } 
+      });
+    }
+
+    // ========== ПОДТВЕРЖДЕНИЕ ВЫВОДА ==========
+    if (action === 'approveWithdraw') {
+      console.log(`📤 Получен запрос на подтверждение вывода: ${withdraw_id}`);
+      
+      const withdraw = await Deposit.findById(withdraw_id);
+      if (!withdraw) {
+        console.log(`❌ Вывод ${withdraw_id} не найден`);
+        return res.json({ success: false, error: 'WITHDRAW_NOT_FOUND' });
+      }
+      if (withdraw.status !== 'pending') {
+        console.log(`❌ Вывод ${withdraw_id} уже обработан (статус: ${withdraw.status})`);
+        return res.json({ success: false, error: 'ALREADY_PROCESSED' });
+      }
+      if (withdraw.type !== 'withdraw') {
+        console.log(`❌ Заявка ${withdraw_id} не является выводом`);
+        return res.json({ success: false, error: 'NOT_WITHDRAW' });
+      }
+      
+      withdraw.status = 'completed';
+      withdraw.processedAt = new Date();
+      withdraw.processedBy = 'admin';
+      await withdraw.save();
+      
+      await sendTelegramNotification(
+        `✅ <b>Ваш вывод подтверждён!</b>\n💰 Сумма: ${withdraw.amount} TON\n💳 Кошелёк: <code>${withdraw.wallet}</code>`,
+        null,
+        withdraw.userId
+      );
+      
+      console.log(`✅ Вывод ${withdraw_id} подтверждён, сумма ${withdraw.amount} TON`);
+      return res.json({ success: true });
+    }
+
+    // ========== ОТКЛОНЕНИЕ ВЫВОДА ==========
+    if (action === 'rejectWithdraw') {
+      console.log(`📤 Получен запрос на отклонение вывода: ${withdraw_id}`);
+      
+      const withdraw = await Deposit.findById(withdraw_id);
+      if (!withdraw) {
+        console.log(`❌ Вывод ${withdraw_id} не найден`);
+        return res.json({ success: false, error: 'WITHDRAW_NOT_FOUND' });
+      }
+      if (withdraw.status !== 'pending') {
+        console.log(`❌ Вывод ${withdraw_id} уже обработан (статус: ${withdraw.status})`);
+        return res.json({ success: false, error: 'ALREADY_PROCESSED' });
+      }
+      if (withdraw.type !== 'withdraw') {
+        console.log(`❌ Заявка ${withdraw_id} не является выводом`);
+        return res.json({ success: false, error: 'NOT_WITHDRAW' });
+      }
+      
+      const user = await User.findOne({ userId: withdraw.userId });
+      if (user) {
+        user.ton += withdraw.amount;
+        user.totalWithdrawn = Math.max(0, (user.totalWithdrawn || 0) - withdraw.amount);
+        await user.save();
+        console.log(`💰 Баланс пользователя ${withdraw.userId} пополнен на ${withdraw.amount} TON`);
+      }
+      
+      withdraw.status = 'cancelled';
+      withdraw.processedAt = new Date();
+      withdraw.processedBy = 'admin';
+      await withdraw.save();
+      
+      await sendTelegramNotification(
+        `❌ <b>Ваш вывод отклонён!</b>\n💰 Сумма: ${withdraw.amount} TON\n⚠️ Средства возвращены на ваш баланс.`,
+        null,
+        withdraw.userId
+      );
+      
+      console.log(`❌ Вывод ${withdraw_id} отклонён, баланс возвращён`);
+      return res.json({ success: true });
+    }
 
     if (action === 'tasks/list') {
       const tasks = await Task.find({ isActive: true }).sort({ order: 1 });
@@ -811,7 +824,7 @@ mongoose.connect(process.env.MONGODB_URL).then(async () => {
   app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
 }).catch(err => console.error('❌ MongoDB error:', err));
 
-// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (в конец) ==========
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 const requestLimits = new Map();
 const CLAIM_LIMITS = new Map();
 
