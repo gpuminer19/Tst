@@ -8,17 +8,19 @@ const axios = require('axios');
 
 dotenv.config();
 
-console.log('🔍 Проверка модулей:');
-try {
-  const sessionMod = require('express-session');
-  console.log('✅ express-session загружен');
-} catch(e) {
-  console.error('❌ express-session НЕ загружен:', e.message);
-}
-
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ========== ИНИЦИАЛИЗАЦИЯ СЕССИЙ ==========
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'secret123',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({ mongoUrl: process.env.MONGODB_URL }),
+  cookie: { maxAge: 24 * 60 * 60 * 1000 }
+}));
+console.log('✅ Сессии инициализированы');
 
 // ========== ЗАЩИТА ОТ ФЛУДА ==========
 const requestLimits = new Map();
@@ -551,7 +553,6 @@ app.post('/api/tg', async (req, res) => {
         return res.json({ success: false, error: "TOO_FAST" });
       }
 
-      // Проверяем, что minerId передан
       if (!minerId) {
         return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
       }
@@ -899,15 +900,6 @@ app.post('/admin/api/tasks/approve', async (req, res) => {
 // ========== ЗАПУСК ==========
 const path = require('path');
 app.use(express.static(__dirname));
-
-// ✅ ИНИЦИАЛИЗАЦИЯ СЕССИЙ (ДО ПОДКЛЮЧЕНИЯ К БД)
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'secret123',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: process.env.MONGODB_URL }),
-  cookie: { maxAge: 24 * 60 * 60 * 1000 }
-}));
 
 const PORT = process.env.PORT || 8080;
 
