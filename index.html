@@ -21,7 +21,7 @@
       background-repeat: no-repeat;
       z-index: 1000;
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       justify-content: center;
       padding-bottom: 80px;
   }
@@ -822,7 +822,9 @@ async function apiRequest(action, additionalData = {}) {
 }
 
 async function loadUserData(referrerId = null) {
+  console.log('Sending referrer_id to server:', referrerId);
   const result = await apiRequest("register", { referrer_id: referrerId });
+  console.log('Server response:', result);
   if (result?.success && result.data) {
     playerData = { 
       ton: result.data.ton, 
@@ -963,10 +965,10 @@ function initExchange() {
 // ========== СИМУЛЯЦИЯ ЗАГРУЗКИ ==========
 async function simulateLoading() {
     const steps = [
-        { text: 'Подключение', progress: 30 },    // 10 → 30
-        { text: 'Авторизация', progress: 60 },    // 30 → 60
-        { text: 'Загрузка профиля', progress: 85 }, // 50 → 85
-        { text: 'Вход в игру', progress: 100 }     // убрал 2 шага
+        { text: 'Подключение', progress: 30 },
+        { text: 'Авторизация', progress: 60 },
+        { text: 'Загрузка профиля', progress: 85 },
+        { text: 'Вход в игру', progress: 100 }
     ];
 
     for (const step of steps) {
@@ -974,7 +976,7 @@ async function simulateLoading() {
         const currentProgress = parseInt(loadingPercentageEl.textContent) || 0;
         const targetProgress = step.progress;
         const diff = targetProgress - currentProgress;
-        const stepsCount = 8;  // 15 → 8
+        const stepsCount = 8;
         const increment = diff / stepsCount;
 
         for (let i = 0; i <= stepsCount; i++) {
@@ -983,9 +985,9 @@ async function simulateLoading() {
             const roundedProgress = Math.floor(newProgress);
             loadingPercentageEl.textContent = `${roundedProgress}%`;
             loaderFillEl.style.width = `${newProgress}%`;
-            await new Promise(r => setTimeout(r, 12)); // 25 → 12
+            await new Promise(r => setTimeout(r, 12));
         }
-        if (step.progress < 100) await new Promise(r => setTimeout(r, 150)); // 300 → 150
+        if (step.progress < 100) await new Promise(r => setTimeout(r, 150));
     }
 }
 
@@ -1021,16 +1023,31 @@ async function init() {
     document.getElementById("userIdShort").innerText = `#${userId.toString().slice(-5)}`;
   }
   
+  // ========== ИСПРАВЛЕННЫЙ КОД ПОЛУЧЕНИЯ РЕФЕРАЛА ==========
   let referrerId = null;
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.has('startapp')) {
-    let param = urlParams.get('startapp');
-    if (param?.startsWith('ref_')) referrerId = param.replace('ref_', '');
-  }
-  if (!referrerId && tg.initDataUnsafe?.start_param) {
+  
+  // 1. Сначала проверяем Telegram Web App (основной способ)
+  console.log('Checking Telegram start_param:', tg.initDataUnsafe?.start_param);
+  if (tg.initDataUnsafe?.start_param) {
     const startParam = tg.initDataUnsafe.start_param;
-    if (startParam?.startsWith('ref_')) referrerId = startParam.replace('ref_', '');
+    if (startParam && startParam.startsWith('ref_')) {
+      referrerId = startParam.replace('ref_', '');
+      console.log('✅ Referrer found in Telegram:', referrerId);
+    }
   }
+  
+  // 2. Если не нашли, проверяем URL (для веб-версии)
+  if (!referrerId) {
+    const urlParams = new URLSearchParams(window.location.search);
+    let param = urlParams.get('startapp') || urlParams.get('start_param');
+    if (param && param.startsWith('ref_')) {
+      referrerId = param.replace('ref_', '');
+      console.log('✅ Referrer found in URL:', referrerId);
+    }
+  }
+  
+  console.log('Final referrer_id:', referrerId);
+  // ========== КОНЕЦ ИСПРАВЛЕННОГО КОДА ==========
   
   initMinerQuantities();
   initGrid();
