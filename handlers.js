@@ -66,9 +66,9 @@ async function handleStart(chatId, userId, userName, text) {
 💎 Добро пожаловать в *CryptoGPU Miner*!
 
 🚀 *Твой стартовый бонус:*
-• Basic Miner (1 шт.)
+• Basic Miner (1 шт.) (доход 15 GPU 0.1 TON)
 • 15 GPU токенов
-• 0.1 TON
+
 
 📈 *Как зарабатывать:*
 1️⃣ Покупай майнеры
