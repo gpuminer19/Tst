@@ -274,7 +274,7 @@ const RATES = {
 };
 
 const MINER_PRICES = {
-  basic: { ton: 0, gpu: 1 },
+  basic: { ton: 0, gpu: 50 },
   normal: { ton: 2, gpu: 0 },
   pro: { ton: 10, gpu: 0 },
   ultra: { ton: 50, gpu: 0 },
@@ -283,7 +283,7 @@ const MINER_PRICES = {
 };
 
 const MINER_LIMITS = {
-  basic: 30,
+  basic: 50,
   normal: null,
   pro: null,
   ultra: null,
