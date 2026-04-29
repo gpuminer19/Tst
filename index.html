@@ -48,7 +48,6 @@
       margin-bottom: -30px;
   }
 
-  /* Проценты */
   .loading-percentage {
       font-size: 2rem;
       font-weight: 800;
@@ -58,7 +57,6 @@
       margin-bottom: 12px;
   }
 
-  /* Прогресс-бар */
   .loader-track {
       width: 100%;
       height: 4px;
@@ -76,7 +74,6 @@
       transition: width 0.2s linear;
   }
 
-  /* Строка статуса */
   .loading-status {
       display: flex;
       align-items: center;
@@ -86,7 +83,6 @@
       font-size: 0.8rem;
   }
 
-  /* Анимированные точки */
   .status-dots span {
       display: inline-block;
       width: 5px;
@@ -105,7 +101,6 @@
       50% { opacity: 1; transform: scale(1.2); }
   }
 
-  /* Адаптация для мобильных устройств */
   @media (max-width: 480px) {
       #loading { padding-bottom: 60px; }
       .loading-percentage { font-size: 1.8rem; }
@@ -115,11 +110,11 @@
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   
   body { 
-    background: #0B0E1A; 
-    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; 
+    background: var(--tg-theme-bg-color, #0B0E1A); 
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; 
     color: #fff; 
     padding-top: 180px;
-    padding-bottom: 80px;
+    padding-bottom: 0;
   }
   
   body::before { 
@@ -210,7 +205,7 @@
   .claim-all-btn { background: linear-gradient(95deg, #008A5C, #00A86B); border: none; font-weight: 700; font-size: 13px; padding: 10px; border-radius: 40px; color: white; width: 100%; cursor: pointer; transition: all 0.15s; }
   .claim-all-btn:active { transform: scale(0.98); }
   
-  .grid { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .grid { padding: 12px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 80px; }
   .card { background: rgba(12, 18, 32, 0.85); backdrop-filter: blur(12px); border-radius: 20px; padding: 10px; display: flex; gap: 10px; align-items: center; border: 1px solid rgba(0, 212, 255, 0.2); }
   .gpu-img { width: 75px; height: 75px; object-fit: contain; background: rgba(0, 0, 0, 0.4); border-radius: 16px; padding: 6px; }
   .card-info { flex: 1; }
@@ -237,22 +232,67 @@
   .ref-link-box span { font-size: 9px; font-family: monospace; color: #FFD699; word-break: break-all; }
   .copy-btn { width: auto; padding: 5px 12px; background: #FF8C00; margin: 0; border-radius: 40px; font-size: 11px; }
   
-  .bottom-nav { 
-    position: fixed; 
-    bottom: 10px; 
-    left: 8px; 
-    right: 8px; 
-    background: rgba(8, 12, 24, 0.95); 
-    backdrop-filter: blur(20px); 
-    border-radius: 40px; 
-    display: flex; 
-    justify-content: space-around; 
-    padding: 4px 6px; 
-    border: 1px solid rgba(0, 212, 255, 0.25); 
-    z-index: 100; 
+  /* ===== СТИЛЬ TELEGRAM ДЛЯ НИЖНЕГО МЕНЮ ===== */
+  .tg-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--tg-theme-bg-color, rgba(11, 14, 26, 0.95));
+    backdrop-filter: blur(20px);
+    border-top: 0.5px solid var(--tg-theme-section-border-color, rgba(255, 255, 255, 0.1));
+    padding: 6px 12px 10px;
+    display: flex;
+    justify-content: space-around;
+    z-index: 100;
   }
-  .nav-btn { background: transparent !important; box-shadow: none !important; width: auto !important; padding: 6px 14px !important; font-size: 18px !important; color: #5A6A8A !important; margin: 0 !important; }
-  .nav-btn.active { color: #00D4FF !important; background: rgba(0, 212, 255, 0.15) !important; border-radius: 40px; }
+
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .tg-bottom-nav {
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    }
+  }
+
+  .tg-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    min-width: 60px;
+  }
+
+  .tg-nav-btn i {
+    font-size: 22px;
+    color: var(--tg-theme-hint-color, #8EA3D4);
+    transition: all 0.12s ease;
+  }
+
+  .tg-nav-btn span {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--tg-theme-hint-color, #8EA3D4);
+    transition: all 0.12s ease;
+  }
+
+  .tg-nav-btn.active i {
+    color: var(--tg-theme-button-color, #0088FF);
+  }
+
+  .tg-nav-btn.active span {
+    color: var(--tg-theme-button-color, #0088FF);
+  }
+
+  .tg-nav-btn:active {
+    transform: scale(0.94);
+    opacity: 0.7;
+  }
+  
   .tab { display: none; animation: fade 0.25s ease; }
   .tab.active { display: block; }
   
@@ -266,7 +306,6 @@
   .deposit-box .pay-btn { margin-top: 4px; background: linear-gradient(95deg, #00D4FF, #0066FF); color: #0B0E1A; border-radius: 40px; }
   .withdraw-btn { background: linear-gradient(95deg, #FF8C00, #FF6600); border-radius: 40px; }
   
-  /* Стиль предупреждения с лампочкой */
   .warning-box {
     background: rgba(255, 200, 0, 0.1);
     border: 1px solid rgba(255, 200, 0, 0.5);
@@ -329,7 +368,7 @@
   .estimate-text { font-size: 10px; color: #6B7CA8; }
   .exchange-rate-box { background: rgba(0,0,0,0.2); border-radius: 14px; padding: 10px; margin-bottom: 14px; text-align: center; }
   .exchange-rate { font-size: 20px; font-weight: bold; color: #00D4FF; display: flex; align-items: center; justify-content: center; gap: 6px; }
-  .exchange-info { margin-top: 14px; background: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; text-align: center; }
+  
   .staking-pool-box {
     margin-top: 16px;
     background: rgba(0, 0, 0, 0.3);
@@ -347,7 +386,7 @@
   .task-completed { margin-top: 6px; font-size: 10px; color: #00A86B; }
   .task-pending { margin-top: 6px; font-size: 10px; color: #FF8C00; }
   
-  .history-list { max-height: 350px; overflow-y: auto; }
+  .history-list { max-height: 350px; overflow-y: auto; margin-bottom: 80px; }
   .history-item { background: rgba(0,0,0,0.3); border-radius: 14px; padding: 10px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
   .history-info { flex: 1; }
   .history-amount { font-weight: bold; font-size: 14px; display: flex; align-items: center; gap: 3px; }
@@ -364,6 +403,10 @@
     display: inline-flex;
     align-items: center;
     gap: 2px;
+  }
+  
+  .content-wrapper {
+    padding-bottom: 70px;
   }
 </style>
 </head>
@@ -415,135 +458,152 @@
   </div>
 </div>
 
-<div id="home" class="tab active">
-  <div class="mining-panel">
-    <div class="mining-title">
-      <i class="fa-solid fa-microchip"></i> АКТИВНЫЙ МАЙНИНГ
-      <span class="mining-indicator"></span>
-    </div>
-    <div class="mining-stats">
-      <div class="mining-card">
-        <div class="mining-label"><img src="ton.png" class="icon-img"> НАКОПЛЕНО TON</div>
-        <div class="mining-value" id="accumulatedTon">0.0000</div>
-        <div class="mining-sub" id="miningRateTon">+0.0000 TON/день</div>
+<div class="content-wrapper">
+  <div id="home" class="tab active">
+    <div class="mining-panel">
+      <div class="mining-title">
+        <i class="fa-solid fa-microchip"></i> АКТИВНЫЙ МАЙНИНГ
+        <span class="mining-indicator"></span>
       </div>
-      <div class="mining-card">
-        <div class="mining-label"><img src="gpu.png" class="icon-img"> НАКОПЛЕНО GPU</div>
-        <div class="mining-value" id="accumulatedGpu">0.00</div>
-        <div class="mining-sub" id="miningRateGpu">+0.00 GPU/день</div>
-      </div>
-    </div>
-    <button class="claim-all-btn" id="claimAllBtn">ЗАБРАТЬ НАКОПЛЕННОЕ</button>
-  </div>
-  <div class="grid" id="grid"></div>
-</div>
-
-<div id="referral" class="tab">
-  <div class="ref-stats">
-    <h3>👥 Приглашено друзей</h3>
-    <div class="friend-count" id="friendCount">0</div>
-    <div class="friends-list" id="friendsList">
-      <div style="text-align:center; padding:20px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>
-    </div>
-  </div>
-  <div class="ref-link-box">
-    <span id="refLink">загрузка...</span>
-    <button class="copy-btn" id="copyRefBtn">📋 Коп</button>
-  </div>
-</div>
-
-<div id="staking" class="tab">
-  <div class="deposit-box">
-    <h3><i class="fa-solid fa-arrows-spin"></i> Обмен валют</h3>
-    <div class="exchange-rate-box">
-      <div style="font-size: 11px; color: #8EA3D4;">Текущий курс</div>
-      <div class="exchange-rate">
-        1 <img src="gpu.png" class="icon-img"> = 0.001 <img src="ton.png" class="icon-img">
-      </div>
-    </div>
-    <div style="margin-bottom: 16px;">
-      <label><img src="gpu.png" class="icon-img"> Продать GPU за <img src="ton.png" class="icon-img"></label>
-      <div class="flex-row">
-        <input type="number" id="sellGpuAmount" placeholder="Количество GPU">
-        <button id="sellGpuBtn" class="sell-btn">Продать</button>
-      </div>
-      <div class="estimate-text" id="sellEstimate">Вы получите: 0 <img src="ton.png" class="icon-img-small"></div>
-    </div>
-    
-    <!-- ПРЕДУПРЕЖДЕНИЕ С ЛАМПОЧКОЙ -->
-    <div class="warning-box">
-      <div class="warning-icon">
-        <i class="fa-solid fa-lightbulb"></i>
-      </div>
-      <div class="warning-text">
-        <strong>Не спешите продавать!</strong><br>
-        <small>Каждый месяц стоимость 1 GPU увеличивается в 2 раза</small>
-      </div>
-    </div>
-    
-    <div class="staking-pool-box">
-      <i class="fa-solid fa-chart-line" style="font-size: 28px; color: #FFD700; margin-bottom: 10px; display: block;"></i>
-      <h4 style="color: #FFD700;">Staking Pool</h4>
-      <p style="font-size: 11px; color: #8EA3D4;">Функция стейкинга скоро будет доступна</p>
-    </div>
-  </div>
-</div>
-
-<div id="tasks" class="tab">
-  <div class="tasks-container">
-    <h3 class="tasks-title">📋 Ежедневные задания</h3>
-    <div id="tasksListGame">
-      <div style="text-align:center; padding:20px; color:#6B7CA8;">Загрузка...</div>
-    </div>
-  </div>
-</div>
-
-<div id="wallet" class="tab">
-  <div class="deposit-box">
-    <h3><img src="ton.png" class="icon-img"> Пополнить баланс</h3>
-    <div id="depositForm">
-      <label>Сумма пополнения (<img src="ton.png" class="icon-img-small">)</label>
-      <input id="depositAmount" type="number" min="0.1" step="0.1" placeholder="Например, 5">
-      <button class="pay-btn" id="payBtn">💸 Оплатить</button>
-    </div>
-    <div id="depositConfirm" style="display: none;">
-      <div style="background: rgba(0,168,107,0.1); border-radius: 14px; padding: 14px; margin-bottom: 14px; border: 1px solid #00A86B;">
-        <div style="margin-bottom: 10px;">
-          <div style="font-size: 10px; color: #8EA3D4;">💰 СУММА</div>
-          <div style="font-size: 18px; font-weight: bold; color: #00FFAA;" id="paymentAmount">0 <img src="ton.png" class="icon-img-small"></div>
+      <div class="mining-stats">
+        <div class="mining-card">
+          <div class="mining-label"><img src="ton.png" class="icon-img"> НАКОПЛЕНО TON</div>
+          <div class="mining-value" id="accumulatedTon">0.0000</div>
+          <div class="mining-sub" id="miningRateTon">+0.0000 TON/день</div>
         </div>
-        <div style="margin-bottom: 10px;">
-          <div style="font-size: 10px; color: #8EA3D4;">🏦 КОШЕЛЁК</div>
-          <div style="font-size: 11px; font-family: monospace; color: #FFD699; word-break: break-all; background: rgba(0,0,0,0.4); padding: 6px; border-radius: 6px;" id="paymentWallet">Загрузка...</div>
-          <button class="copy-mini" onclick="copyText(document.getElementById('paymentWallet').innerText)">📋 Копировать</button>
+        <div class="mining-card">
+          <div class="mining-label"><img src="gpu.png" class="icon-img"> НАКОПЛЕНО GPU</div>
+          <div class="mining-value" id="accumulatedGpu">0.00</div>
+          <div class="mining-sub" id="miningRateGpu">+0.00 GPU/день</div>
         </div>
       </div>
-      <div style="display: flex; gap: 10px;">
-        <button id="confirmPayBtn" style="background: #00A86B; flex: 1;">✅ Я оплатил</button>
-        <button id="cancelPayBtn" style="background: #DC2626; flex: 1;">❌ Отменить</button>
+      <button class="claim-all-btn" id="claimAllBtn">ЗАБРАТЬ НАКОПЛЕННОЕ</button>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div id="referral" class="tab">
+    <div class="ref-stats">
+      <h3>👥 Приглашено друзей</h3>
+      <div class="friend-count" id="friendCount">0</div>
+      <div class="friends-list" id="friendsList">
+        <div style="text-align:center; padding:20px; color:#6B7CA8;">😢 У вас пока нет приглашённых друзей</div>
       </div>
     </div>
-    <hr>
-    <h3><img src="ton.png" class="icon-img"> Вывод TON</h3>
-    <label>Сумма вывода (<img src="ton.png" class="icon-img-small">)</label>
-    <input id="withdrawAmount" type="number" min="1" step="0.5" placeholder="Минимум 1">
-    <label>TON-кошелёк для вывода</label>
-    <textarea id="withdrawWallet" rows="2" placeholder="Введите ваш TON-кошелёк (например, EQD..."></textarea>
-    <button class="pay-btn withdraw-btn" id="withdrawBtn">💸 Запросить вывод</button>
-    <hr>
-    <h3>📜 История транзакций</h3>
-    <div id="historyList" class="history-list">
-      <div style="text-align:center; padding:20px; color:#6B7CA8;">Загрузка...</div>
+    <div class="ref-link-box">
+      <span id="refLink">загрузка...</span>
+      <button class="copy-btn" id="copyRefBtn">📋 Коп</button>
+    </div>
+  </div>
+
+  <div id="staking" class="tab">
+    <div class="deposit-box">
+      <h3><i class="fa-solid fa-arrows-spin"></i> Обмен валют</h3>
+      <div class="exchange-rate-box">
+        <div style="font-size: 11px; color: #8EA3D4;">Текущий курс</div>
+        <div class="exchange-rate">
+          1 <img src="gpu.png" class="icon-img"> = 0.001 <img src="ton.png" class="icon-img">
+        </div>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label><img src="gpu.png" class="icon-img"> Продать GPU за <img src="ton.png" class="icon-img"></label>
+        <div class="flex-row">
+          <input type="number" id="sellGpuAmount" placeholder="Количество GPU">
+          <button id="sellGpuBtn" class="sell-btn">Продать</button>
+        </div>
+        <div class="estimate-text" id="sellEstimate">Вы получите: 0 <img src="ton.png" class="icon-img-small"></div>
+      </div>
+      
+      <div class="warning-box">
+        <div class="warning-icon">
+          <i class="fa-solid fa-lightbulb"></i>
+        </div>
+        <div class="warning-text">
+          <strong>Не спешите продавать!</strong><br>
+          <small>Каждый месяц стоимость 1 GPU увеличивается в 2 раза</small>
+        </div>
+      </div>
+      
+      <div class="staking-pool-box">
+        <i class="fa-solid fa-chart-line" style="font-size: 28px; color: #FFD700; margin-bottom: 10px; display: block;"></i>
+        <h4 style="color: #FFD700;">Staking Pool</h4>
+        <p style="font-size: 11px; color: #8EA3D4;">Функция стейкинга скоро будет доступна</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="tasks" class="tab">
+    <div class="tasks-container">
+      <h3 class="tasks-title">📋 Ежедневные задания</h3>
+      <div id="tasksListGame">
+        <div style="text-align:center; padding:20px; color:#6B7CA8;">Загрузка...</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="wallet" class="tab">
+    <div class="deposit-box">
+      <h3><img src="ton.png" class="icon-img"> Пополнить баланс</h3>
+      <div id="depositForm">
+        <label>Сумма пополнения (<img src="ton.png" class="icon-img-small">)</label>
+        <input id="depositAmount" type="number" min="0.1" step="0.1" placeholder="Например, 5">
+        <button class="pay-btn" id="payBtn">💸 Оплатить</button>
+      </div>
+      <div id="depositConfirm" style="display: none;">
+        <div style="background: rgba(0,168,107,0.1); border-radius: 14px; padding: 14px; margin-bottom: 14px; border: 1px solid #00A86B;">
+          <div style="margin-bottom: 10px;">
+            <div style="font-size: 10px; color: #8EA3D4;">💰 СУММА</div>
+            <div style="font-size: 18px; font-weight: bold; color: #00FFAA;" id="paymentAmount">0 <img src="ton.png" class="icon-img-small"></div>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <div style="font-size: 10px; color: #8EA3D4;">🏦 КОШЕЛЁК</div>
+            <div style="font-size: 11px; font-family: monospace; color: #FFD699; word-break: break-all; background: rgba(0,0,0,0.4); padding: 6px; border-radius: 6px;" id="paymentWallet">Загрузка...</div>
+            <button class="copy-mini" onclick="copyText(document.getElementById('paymentWallet').innerText)">📋 Копировать</button>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button id="confirmPayBtn" style="background: #00A86B; flex: 1;">✅ Я оплатил</button>
+          <button id="cancelPayBtn" style="background: #DC2626; flex: 1;">❌ Отменить</button>
+        </div>
+      </div>
+      <hr>
+      <h3><img src="ton.png" class="icon-img"> Вывод TON</h3>
+      <label>Сумма вывода (<img src="ton.png" class="icon-img-small">)</label>
+      <input id="withdrawAmount" type="number" min="1" step="0.5" placeholder="Минимум 1">
+      <label>TON-кошелёк для вывода</label>
+      <textarea id="withdrawWallet" rows="2" placeholder="Введите ваш TON-кошелёк (например, EQD..."></textarea>
+      <button class="pay-btn withdraw-btn" id="withdrawBtn">💸 Запросить вывод</button>
+      <hr>
+      <h3>📜 История транзакций</h3>
+      <div id="historyList" class="history-list">
+        <div style="text-align:center; padding:20px; color:#6B7CA8;">Загрузка...</div>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="bottom-nav">
-  <button class="nav-btn active" onclick="openTab('home',this)"><i class="fa-solid fa-house"></i></button>
-  <button class="nav-btn" onclick="openTab('referral',this)"><i class="fa-solid fa-user-group"></i></button>
-  <button class="nav-btn" onclick="openTab('staking',this)"><i class="fa-solid fa-coins"></i></button>
-  <button class="nav-btn" onclick="openTab('tasks',this)"><i class="fa-solid fa-list-check"></i></button>
-  <button class="nav-btn" onclick="openTab('wallet',this)"><i class="fa-solid fa-wallet"></i></button>
+<!-- НИЖНЕЕ МЕНЮ В СТИЛЕ TELEGRAM -->
+<div class="tg-bottom-nav">
+  <button class="tg-nav-btn active" onclick="openTab('home',this)">
+    <i class="fa-solid fa-house"></i>
+    <span>Главная</span>
+  </button>
+  <button class="tg-nav-btn" onclick="openTab('referral',this)">
+    <i class="fa-solid fa-user-group"></i>
+    <span>Друзья</span>
+  </button>
+  <button class="tg-nav-btn" onclick="openTab('staking',this)">
+    <i class="fa-solid fa-arrow-right-arrow-left"></i>
+    <span>Обмен</span>
+  </button>
+  <button class="tg-nav-btn" onclick="openTab('tasks',this)">
+    <i class="fa-solid fa-list-check"></i>
+    <span>Задания</span>
+  </button>
+  <button class="tg-nav-btn" onclick="openTab('wallet',this)">
+    <i class="fa-solid fa-wallet"></i>
+    <span>Кошелёк</span>
+  </button>
 </div>
 </div>
 
@@ -1049,15 +1109,15 @@ async function simulateLoading() {
 }
 
 // ========== НАВИГАЦИЯ ==========
-window.openTab = function(id, btn) {
+function openTab(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.getElementById(id).classList.add("active");
-  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tg-nav-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   if (id === "referral") { loadReferrals(); updateRefLink(); }
   if (id === "wallet") { renderHistory(); }
   if (id === "tasks") { loadTasksGame(); }
-};
+}
 
 function copyText(text) { 
   navigator.clipboard.writeText(text);
