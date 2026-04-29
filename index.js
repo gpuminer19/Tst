@@ -7,148 +7,16 @@ const MongoStore = require('connect-mongo');
 const axios = require('axios');
 const crypto = require('crypto');
 
+// Импорт обработчика вебхука
+const { handleWebhook } = require('./handlers');
+
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ========== ВЕРИФИКАЦИЯ TELEGRAM INIT DATA ==========
-function verifyTelegramInitData(initData) {
-  if (!initData) return false;
-  
-  try {
-    const urlParams = new URLSearchParams(initData);
-    const hash = urlParams.get('hash');
-    if (!hash) return false;
-    
-    urlParams.delete('hash');
-    const paramsArray = Array.from(urlParams.entries());
-    paramsArray.sort((a, b) => a[0].localeCompare(b[0]));
-    
-    const dataCheckString = paramsArray.map(([k, v]) => `${k}=${v}`).join('\n');
-    
-    const secretKey = crypto.createHmac('sha256', 'WebAppData')
-      .update(process.env.TELEGRAM_BOT_TOKEN)
-      .digest();
-    
-    const computedHash = crypto.createHmac('sha256', secretKey)
-      .update(dataCheckString)
-      .digest('hex');
-    
-    if (computedHash !== hash) return false;
-    
-    // Проверка, что данные не старше 24 часов
-    const authDate = parseInt(urlParams.get('auth_date'));
-    if (authDate && (Date.now() / 1000 - authDate) > 86400) return false;
-    
-    return true;
-  } catch (error) {
-    console.error('Verify error:', error);
-    return false;
-  }
-}
-
-// ========== ЗАЩИТА ОТ ФЛУДА ==========
-const requestLimits = new Map();
-const CLAIM_LIMITS = new Map();
-
-// АВТОМАТИЧЕСКАЯ ОЧИСТКА СТАРЫХ ЗАПИСЕЙ (каждые 30 секунд)
-setInterval(() => {
-  const now = Date.now();
-  const CLEANUP_AFTER_MS = 60000; // 1 минута
-  
-  let cleanedRequests = 0;
-  let cleanedClaims = 0;
-  
-  for (const [key, data] of requestLimits.entries()) {
-    if (data.times && data.times.length > 0) {
-      const oldestTime = data.times[0];
-      if (now - oldestTime > CLEANUP_AFTER_MS) {
-        requestLimits.delete(key);
-        cleanedRequests++;
-      }
-    } else if (!data.times || data.times.length === 0) {
-      requestLimits.delete(key);
-      cleanedRequests++;
-    }
-  }
-  
-  for (const [key, data] of CLAIM_LIMITS.entries()) {
-    if (now - data.lastClaim > CLEANUP_AFTER_MS) {
-      CLAIM_LIMITS.delete(key);
-      cleanedClaims++;
-    }
-  }
-  
-  if (cleanedRequests > 0 || cleanedClaims > 0) {
-    console.log(`🧹 Rate limit cleanup: удалено ${cleanedRequests} записей, ${cleanedClaims} claim-записей. Активных: ${requestLimits.size} / ${CLAIM_LIMITS.size}`);
-  }
-}, 30000);
-
-function checkRateLimit(userId, action, limitMs = 1000, maxRequests = 5) {
-  const key = `${userId}:${action}`;
-  const now = Date.now();
-  const userData = requestLimits.get(key);
-  
-  if (userData) {
-    const recentRequests = userData.times.filter(t => now - t < limitMs);
-    userData.times = recentRequests;
-    
-    if (recentRequests.length >= maxRequests) {
-      return false;
-    }
-    userData.times.push(now);
-  } else {
-    requestLimits.set(key, { times: [now] });
-  }
-  return true;
-}
-
-function checkClaimRateLimit(userId) {
-  const key = `claim:${userId}`;
-  const now = Date.now();
-  const userData = CLAIM_LIMITS.get(key);
-  
-  if (userData && (now - userData.lastClaim) < 30000) { // 30 секунд
-    return false;
-  }
-  CLAIM_LIMITS.set(key, { lastClaim: now });
-  return true;
-}
-
-// ========== MIDDLEWARE ПРОВЕРКИ ПОДПИСИ ==========
-app.use('/api/tg', (req, res, next) => {
-  const initData = req.headers['x-telegram-init-data'];
-  
-  if (!initData && process.env.NODE_ENV !== 'production') {
-    console.log('⚠️ Тестовый режим: пропуск проверки initData');
-    return next();
-  }
-  
-  if (!initData) {
-    return res.status(401).json({ success: false, error: 'Unauthorized: no init data' });
-  }
-  
-  if (!verifyTelegramInitData(initData)) {
-    console.error('❌ Неверная подпись initData');
-    return res.status(403).json({ success: false, error: 'Forbidden: invalid signature' });
-  }
-  
-  const urlParams = new URLSearchParams(initData);
-  const userParam = urlParams.get('user');
-  if (userParam) {
-    try {
-      const userObj = JSON.parse(userParam);
-      req.verifiedUserId = userObj.id.toString();
-      req.verifiedUserName = userObj.first_name || userObj.username;
-    } catch(e) {}
-  }
-  
-  next();
-});
-
-// ========== ИНИЦИАЛИЗАЦИЯ СЕССИЙ ==========
+// ========== СЕССИИ ==========
 app.use(session({
   secret: process.env.SESSION_SECRET || 'secret123',
   resave: false,
@@ -170,25 +38,21 @@ async function sendTelegramNotification(text, buttons = null) {
       text: text,
       parse_mode: 'HTML'
     };
-    
     if (buttons && buttons.length > 0) {
       payload.reply_markup = {
-        inline_keyboard: buttons.map(row => 
-          row.map(btn => ({
-            text: btn.text,
-            callback_data: btn.callback_data
-          }))
-        )
+        inline_keyboard: buttons.map(row => row.map(btn => ({
+          text: btn.text,
+          callback_data: btn.callback_data
+        })))
       };
     }
-    
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, payload);
   } catch (error) {
     console.error('Telegram error:', error.message);
   }
 }
 
-// ========== СХЕМЫ ==========
+// ========== СХЕМЫ MONGODB ==========
 const userSchema = new mongoose.Schema({
   userId: { type: String, unique: true },
   name: String,
@@ -260,7 +124,7 @@ const Admin = mongoose.model('Admin', adminSchema);
 const Task = mongoose.model('Task', taskSchema);
 const UserTask = mongoose.model('UserTask', userTaskSchema);
 
-// ========== РЕЙТЫ МАЙНЕРОВ ==========
+// ========== КОНСТАНТЫ ==========
 const RATES = {
   basic: { ton: 0.01 / 24, gpu: 15 / 24 },
   normal: { ton: 0.02 / 24, gpu: 15 / 24 },
@@ -274,7 +138,7 @@ const RATES = {
 };
 
 const MINER_PRICES = {
-  basic: { ton: 0, gpu: 40 },
+  basic: { ton: 0, gpu: 1 },
   normal: { ton: 2, gpu: 0 },
   pro: { ton: 10, gpu: 0 },
   ultra: { ton: 50, gpu: 0 },
@@ -283,7 +147,7 @@ const MINER_PRICES = {
 };
 
 const MINER_LIMITS = {
-  basic: 50,
+  basic: 30,
   normal: null,
   pro: null,
   ultra: null,
@@ -291,66 +155,64 @@ const MINER_LIMITS = {
   minex: null
 };
 
-const REFERRAL_MINER_REQUIREMENTS = {
-  friend: { requiredActive: 10, requiredEarned: 30 },
-  bro: { requiredActive: 50, requiredEarned: 30 },
-  nexus: { requiredActive: 150, requiredEarned: 30 }
-};
-
-async function checkReferralMiners(userId) {
-  const user = await User.findOne({ userId });
-  if (!user) return;
-  
-  const activeFriendsCount = user.invitedFriends.filter(f => (f.earnedGpu || 0) >= 30).length;
-  
-  let updated = false;
-  
-  if (activeFriendsCount >= 10 && !user.minerQuantities?.friend) {
-    user.minerQuantities = user.minerQuantities || {};
-    user.minerQuantities.friend = 1;
-    updated = true;
-    console.log(`🎁 ${userId}: получен Friend Miner`);
-    await sendTelegramNotification(`🎁 <b>Получен Friend Miner!</b>\nПользователь: <code>${userId}</code>`);
-  }
-  
-  if (activeFriendsCount >= 50 && !user.minerQuantities?.bro) {
-    user.minerQuantities = user.minerQuantities || {};
-    user.minerQuantities.bro = 1;
-    updated = true;
-    console.log(`🎁 ${userId}: получен Bro Miner`);
-    await sendTelegramNotification(`🎁 <b>Получен Bro Miner!</b>\nПользователь: <code>${userId}</code>`);
-  }
-  
-  if (activeFriendsCount >= 150 && !user.minerQuantities?.nexus) {
-    user.minerQuantities = user.minerQuantities || {};
-    user.minerQuantities.nexus = 1;
-    updated = true;
-    console.log(`🎁 ${userId}: получен Nexus Miner`);
-    await sendTelegramNotification(`🎁 <b>Получен Nexus Miner!</b>\nПользователь: <code>${userId}</code>`);
-  }
-  
-  if (updated) {
-    await user.save();
+// ========== ВЕРИФИКАЦИЯ TELEGRAM INIT DATA ==========
+function verifyTelegramInitData(initData) {
+  if (!initData) return false;
+  try {
+    const urlParams = new URLSearchParams(initData);
+    const hash = urlParams.get('hash');
+    if (!hash) return false;
+    urlParams.delete('hash');
+    const paramsArray = Array.from(urlParams.entries());
+    paramsArray.sort((a, b) => a[0].localeCompare(b[0]));
+    const dataCheckString = paramsArray.map(([k, v]) => `${k}=${v}`).join('\n');
+    const secretKey = crypto.createHmac('sha256', 'WebAppData')
+      .update(process.env.TELEGRAM_BOT_TOKEN)
+      .digest();
+    const computedHash = crypto.createHmac('sha256', secretKey)
+      .update(dataCheckString)
+      .digest('hex');
+    if (computedHash !== hash) return false;
+    const authDate = parseInt(urlParams.get('auth_date'));
+    if (authDate && (Date.now() / 1000 - authDate) > 86400) return false;
+    return true;
+  } catch (error) {
+    console.error('Verify error:', error);
+    return false;
   }
 }
 
+// ========== MIDDLEWARE ПРОВЕРКИ ПОДПИСИ ==========
+app.use('/api/tg', (req, res, next) => {
+  const initData = req.headers['x-telegram-init-data'];
+  if (!initData && process.env.NODE_ENV !== 'production') return next();
+  if (!initData) return res.status(401).json({ success: false, error: 'Unauthorized' });
+  if (!verifyTelegramInitData(initData)) return res.status(403).json({ success: false, error: 'Forbidden' });
+  const urlParams = new URLSearchParams(initData);
+  const userParam = urlParams.get('user');
+  if (userParam) {
+    try {
+      const userObj = JSON.parse(userParam);
+      req.verifiedUserId = userObj.id.toString();
+      req.verifiedUserName = userObj.first_name || userObj.username;
+    } catch(e) {}
+  }
+  next();
+});
+
+// ========== ФУНКЦИИ БИЗНЕС-ЛОГИКИ ==========
 async function calculateOffline(userId) {
   const user = await User.findOne({ userId });
   if (!user || user.isBanned) return;
-
   const now = Date.now();
   const lastUpdate = user.lastMiningUpdate || now;
   const hoursPassed = (now - lastUpdate) / (1000 * 3600);
-
   if (hoursPassed < 0.0001 || hoursPassed > 720) {
     user.lastMiningUpdate = now;
     await user.save();
     return;
   }
-
-  let earnedTon = 0;
-  let earnedGpu = 0;
-
+  let earnedTon = 0, earnedGpu = 0;
   for (const [minerId, qty] of Object.entries(user.minerQuantities || {})) {
     const rate = RATES[minerId];
     if (rate && qty > 0) {
@@ -358,43 +220,60 @@ async function calculateOffline(userId) {
       earnedGpu += rate.gpu * qty * hoursPassed;
     }
   }
-
   if (earnedTon > 0 || earnedGpu > 0) {
     user.accumulatedTon += earnedTon;
     user.accumulatedGpu += earnedGpu;
   }
   user.lastMiningUpdate = now;
   await user.save();
-  
   console.log(`📊 ${userId}: офлайн-накоплено +${earnedTon.toFixed(8)} TON`);
 }
 
 async function giveReferralCommission(userId, claimedTon, claimedGpu) {
   if (!claimedTon && !claimedGpu) return;
-  
   const user = await User.findOne({ userId });
   if (!user || !user.referrerId) return;
-  
   const referrer = await User.findOne({ userId: user.referrerId });
   if (!referrer || referrer.isBanned) return;
-  
   const commissionTon = claimedTon * 0.02;
   const commissionGpu = claimedGpu * 0.02;
-  
   if (commissionTon > 0 || commissionGpu > 0) {
     referrer.ton += commissionTon;
     referrer.gpu += commissionGpu;
-    
     const friend = referrer.invitedFriends.find(f => f.friendId === userId);
-    if (friend) {
-      friend.earnedGpu = (friend.earnedGpu || 0) + claimedGpu;
-    }
-    
+    if (friend) friend.earnedGpu = (friend.earnedGpu || 0) + claimedGpu;
     await referrer.save();
-    
     console.log(`👥 Рефереру ${referrer.userId} начислено +${commissionTon.toFixed(6)} TON`);
-    await checkReferralMiners(referrer.userId);
   }
+}
+
+async function checkReferralMiners(userId) {
+  const user = await User.findOne({ userId });
+  if (!user) return;
+  const activeFriendsCount = user.invitedFriends.filter(f => (f.earnedGpu || 0) >= 30).length;
+  let updated = false;
+  if (activeFriendsCount >= 10 && !user.minerQuantities?.friend) {
+    user.minerQuantities = user.minerQuantities || {};
+    user.minerQuantities.friend = 1;
+    updated = true;
+    console.log(`🎁 ${userId}: получен Friend Miner`);
+    await sendTelegramNotification(`🎁 <b>Получен Friend Miner!</b>\nПользователь: <code>${userId}</code>`);
+  }
+  if (activeFriendsCount >= 50 && !user.minerQuantities?.bro) {
+    user.minerQuantities = user.minerQuantities || {};
+    user.minerQuantities.bro = 1;
+    updated = true;
+    console.log(`🎁 ${userId}: получен Bro Miner`);
+    await sendTelegramNotification(`🎁 <b>Получен Bro Miner!</b>\nПользователь: <code>${userId}</code>`);
+  }
+  if (activeFriendsCount >= 150 && !user.minerQuantities?.nexus) {
+    user.minerQuantities = user.minerQuantities || {};
+    user.minerQuantities.nexus = 1;
+    updated = true;
+    console.log(`🎁 ${userId}: получен Nexus Miner`);
+    await sendTelegramNotification(`🎁 <b>Получен Nexus Miner!</b>\nПользователь: <code>${userId}</code>`);
+  }
+  if (updated) await user.save();
 }
 
 async function ensureAdminExists() {
@@ -407,387 +286,156 @@ async function ensureAdminExists() {
   }
 }
 
-// ========== TELEGRAM WEBHOOK ==========
+// ========== TELEGRAM WEBHOOK (вынесен в handlers.js) ==========
 app.post('/telegram/webhook', async (req, res) => {
-  const { callback_query } = req.body;
-  if (!callback_query) return res.sendStatus(200);
-  
-  const { data, message } = callback_query;
-  const [action, type, id] = data.split(':');
-  
   try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-      callback_query_id: callback_query.id,
-      text: action === 'approve' ? '✅ Подтверждено' : '❌ Отклонено'
-    });
-    
-    if (type === 'deposit') {
-      if (action === 'approve') {
-        const deposit = await Deposit.findById(id);
-        if (deposit && deposit.status === 'pending') {
-          await User.updateOne(
-            { userId: deposit.userId },
-            { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } }
-          );
-          deposit.status = 'completed';
-          deposit.processedAt = new Date();
-          deposit.processedBy = 'telegram';
-          await deposit.save();
-        }
-      } else {
-        await Deposit.findByIdAndUpdate(id, { status: 'cancelled' });
-      }
-    }
-    
-    if (type === 'withdraw') {
-      if (action === 'approve') {
-        await Deposit.findByIdAndUpdate(id, { status: 'completed', processedAt: new Date(), processedBy: 'telegram' });
-      } else {
-        const withdraw = await Deposit.findById(id);
-        if (withdraw && withdraw.status === 'pending') {
-          await User.updateOne(
-            { userId: withdraw.userId },
-            { $inc: { ton: withdraw.amount } }
-          );
-          await Deposit.findByIdAndUpdate(id, { status: 'cancelled' });
-        }
-      }
-    }
-    
-    if (type === 'task') {
-      if (action === 'approve') {
-        const userTask = await UserTask.findById(id);
-        if (userTask && !userTask.claimed) {
-          const task = await Task.findOne({ id: userTask.taskId });
-          const user = await User.findOne({ userId: userTask.userId });
-          if (user && task) {
-            user.ton += task.rewardTon;
-            user.gpu += task.rewardGpu;
-            await user.save();
-            await giveReferralCommission(userTask.userId, task.rewardTon, task.rewardGpu);
-          }
-          userTask.claimed = true;
-          await userTask.save();
-        }
-      } else if (action === 'reject') {
-        await UserTask.findByIdAndDelete(id);
-      }
-    }
-    
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
-      chat_id: message.chat.id,
-      message_id: message.message_id,
-      text: message.text + '\n\n✅ Обработано!',
-      parse_mode: 'HTML'
-    });
+    await handleWebhook(req.body);
+    res.sendStatus(200);
   } catch (error) {
     console.error('Webhook error:', error);
+    res.sendStatus(500);
   }
-  
-  res.sendStatus(200);
 });
 
-// ========== ОБМЕН GPU НА TON (с защитой) ==========
+// ========== API ЭНДПОИНТЫ ==========
 app.post('/api/exchange', async (req, res) => {
   const { user_id, amount } = req.body;
-  
-  if (!user_id || !amount || amount <= 0) {
-    return res.status(400).json({ success: false, error: 'Invalid data' });
-  }
-  
-  // Проверка верификации
-  if (req.verifiedUserId && req.verifiedUserId !== user_id) {
-    return res.status(403).json({ success: false, error: 'USER_ID_MISMATCH' });
-  }
-  
-  // Анти-флуд
-  if (!checkRateLimit(user_id, 'exchange', 2000, 3)) {
-    return res.status(429).json({ success: false, error: 'TOO_MANY_REQUESTS' });
-  }
-  
+  if (!user_id || !amount || amount <= 0) return res.status(400).json({ success: false, error: 'Invalid data' });
+  if (req.verifiedUserId && req.verifiedUserId !== user_id) return res.status(403).json({ success: false, error: 'USER_ID_MISMATCH' });
   try {
     const user = await User.findOne({ userId: user_id });
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-    
-    if (user.gpu < amount) {
-      return res.status(400).json({ success: false, error: 'Insufficient GPU' });
-    }
-    
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.gpu < amount) return res.status(400).json({ success: false, error: 'Insufficient GPU' });
     const EXCHANGE_RATE = 0.001;
     const tonReceived = amount * EXCHANGE_RATE;
-    
     user.gpu -= amount;
     user.ton += tonReceived;
     await user.save();
-    
     console.log(`🔄 ${user_id}: продал ${amount} GPU за ${tonReceived} TON`);
-    
-    res.json({ 
-      success: true, 
-      data: {
-        ton: user.ton,
-        gpu: user.gpu,
-        tonReceived: tonReceived
-      }
-    });
+    res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, tonReceived } });
   } catch (error) {
     console.error('Exchange error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// ========== API ==========
 app.post('/api/tg', async (req, res) => {
-  const { action, user_id, name, referrer_id, ton, gpu, friends, accumulatedTon, accumulatedGpu, minerQuantities, amount, tonWallet, taskId, deposit_id, minerId, quantity } = req.body;
+  const { action, user_id, name, referrer_id, ton, gpu, friends, minerQuantities, amount, tonWallet, taskId, deposit_id, minerId, quantity } = req.body;
 
   try {
-    // Проверка подмены user_id
-    if (req.verifiedUserId && req.verifiedUserId !== user_id) {
-      console.error(`⚠️ Попытка подмены ID: запрос ${user_id}, реальный ${req.verifiedUserId}`);
-      return res.status(403).json({ success: false, error: 'USER_ID_MISMATCH' });
-    }
-    
+    if (req.verifiedUserId && req.verifiedUserId !== user_id) return res.status(403).json({ success: false, error: 'USER_ID_MISMATCH' });
     const banned = await User.findOne({ userId: user_id, isBanned: true });
     if (banned) return res.status(403).json({ success: false, error: 'BANNED' });
 
-    // РЕГИСТРАЦИЯ
     if (action === 'register') {
-      if (!checkRateLimit(user_id, 'register', 5000, 3)) {
-        return res.status(429).json({ success: false, error: 'TOO_MANY_REQUESTS' });
-      }
-      
+      if (!checkRateLimit(user_id, 'register', 5000, 3)) return res.status(429).json({ success: false, error: 'TOO_MANY_REQUESTS' });
       let user = await User.findOne({ userId: user_id });
-      
       if (!user) {
-        user = new User({
-          userId: user_id,
-          name: req.verifiedUserName || name || 'Игрок',
-          minerQuantities: { basic: 1 },
-          referrerId: null
-        });
-        
+        user = new User({ userId: user_id, name: req.verifiedUserName || name || 'Игрок', minerQuantities: { basic: 1 }, referrerId: null });
         if (referrer_id && referrer_id !== user_id && referrer_id !== 'null' && referrer_id !== 'undefined') {
           const referrer = await User.findOne({ userId: referrer_id });
           if (referrer && !referrer.isBanned && !referrer.isBot) {
             user.referrerId = referrer_id;
-            
             const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === user_id);
             if (!alreadyInvited) {
-              referrer.invitedFriends.push({
-                friendId: user_id,
-                friendName: name || user_id.slice(-5),
-                date: new Date().toLocaleDateString(),
-                earnedGpu: 0
-              });
+              referrer.invitedFriends.push({ friendId: user_id, friendName: name || user_id.slice(-5), date: new Date().toLocaleDateString(), earnedGpu: 0 });
               referrer.friends = referrer.invitedFriends.length;
               await referrer.save();
               console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
             }
           }
         }
-        
         await user.save();
         console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
-        
-        await sendTelegramNotification(
-          `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
-        );
+        await sendTelegramNotification(`🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`);
       } else {
         console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
         await calculateOffline(user_id);
         user = await User.findOne({ userId: user_id });
       }
-      
       const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
-      
-      return res.json({
-        success: true,
-        data: {
-          ton: user.ton,
-          gpu: user.gpu,
-          friends: user.friends,
-          invitedFriends: user.invitedFriends || [],
-          accumulatedTon: user.accumulatedTon,
-          accumulatedGpu: user.accumulatedGpu,
-          minerQuantities: user.minerQuantities,
-          transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
-        }
-      });
+      return res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, friends: user.friends, invitedFriends: user.invitedFriends || [], accumulatedTon: user.accumulatedTon, accumulatedGpu: user.accumulatedGpu, minerQuantities: user.minerQuantities, transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt })) } });
     }
 
-    // СОХРАНЕНИЕ
     if (action === 'save') {
       const existingUser = await User.findOne({ userId: user_id });
       if (!existingUser) return res.json({ success: false, error: "User not found" });
-      
-      const updateData = {
-        friends: friends,
-        lastSeen: new Date()
-      };
-      
-      if (minerQuantities && Object.keys(minerQuantities).length > 0) {
-        updateData.minerQuantities = minerQuantities;
-      }
-      
-      await User.findOneAndUpdate(
-        { userId: user_id },
-        updateData,
-        { upsert: false }
-      );
-      
+      const updateData = { friends, lastSeen: new Date() };
+      if (minerQuantities && Object.keys(minerQuantities).length > 0) updateData.minerQuantities = minerQuantities;
+      await User.findOneAndUpdate({ userId: user_id }, updateData, { upsert: false });
       console.log(`💾 Сохранено состояние для ${user_id}`);
       return res.json({ success: true });
     }
 
-    // СБОР НАКОПЛЕННОЙ НАГРАДЫ (с усиленной защитой)
     if (action === 'claim') {
-      if (!checkRateLimit(user_id, 'claim', 1000, 2)) {
-        return res.json({ success: false, error: "TOO_FAST" });
-      }
-      
-      if (!checkClaimRateLimit(user_id)) {
-        return res.json({ success: false, error: "CLAIM_COOLDOWN" });
-      }
-      
+      if (!checkRateLimit(user_id, 'claim', 1000, 2)) return res.json({ success: false, error: "TOO_FAST" });
+      if (!checkClaimRateLimit(user_id)) return res.json({ success: false, error: "CLAIM_COOLDOWN" });
       await calculateOffline(user_id);
-      
       const user = await User.findOne({ userId: user_id });
       if (!user) return res.json({ success: false, error: "User not found" });
-      
       const rewardTon = user.accumulatedTon || 0;
       const rewardGpu = user.accumulatedGpu || 0;
-      
-      if (rewardTon === 0 && rewardGpu === 0) {
-        return res.json({ success: false, error: "NOTHING_TO_CLAIM" });
-      }
-      
+      if (rewardTon === 0 && rewardGpu === 0) return res.json({ success: false, error: "NOTHING_TO_CLAIM" });
       user.ton += rewardTon;
       user.gpu += rewardGpu;
       user.accumulatedTon = 0;
       user.accumulatedGpu = 0;
       await user.save();
-      
       await giveReferralCommission(user_id, rewardTon, rewardGpu);
-      
       console.log(`🎁 ${user_id}: собрал награду +${rewardTon.toFixed(8)} TON`);
-      
-      return res.json({ 
-        success: true, 
-        data: {
-          ton: user.ton,
-          gpu: user.gpu,
-          accumulatedTon: 0,
-          accumulatedGpu: 0
-        }
-      });
+      return res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, accumulatedTon: 0, accumulatedGpu: 0 } });
     }
 
-    // ПОКУПКА МАЙНЕРА
     if (action === 'buy') {
-      if (!checkRateLimit(user_id, 'buy', 2000, 3)) {
-        return res.json({ success: false, error: "TOO_FAST" });
-      }
-
-      if (!minerId) {
-        return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
-      }
-
+      if (!checkRateLimit(user_id, 'buy', 2000, 3)) return res.json({ success: false, error: "TOO_FAST" });
+      if (!minerId) return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
       const price = MINER_PRICES[minerId];
       const limit = MINER_LIMITS[minerId];
-      
-      if (!price) {
-        return res.json({ success: false, error: "INVALID_MINER" });
-      }
-      
+      if (!price) return res.json({ success: false, error: "INVALID_MINER" });
       const user = await User.findOne({ userId: user_id });
       if (!user) return res.json({ success: false, error: "User not found" });
-      
       const currentQty = user.minerQuantities?.[minerId] || 0;
       const buyQuantity = quantity || 1;
-      
-      if (limit !== null && currentQty + buyQuantity > limit) {
-        return res.json({ success: false, error: "LIMIT_REACHED" });
-      }
-      
+      if (limit !== null && currentQty + buyQuantity > limit) return res.json({ success: false, error: "LIMIT_REACHED" });
       const totalTonPrice = price.ton * buyQuantity;
       const totalGpuPrice = price.gpu * buyQuantity;
-      
-      if (totalTonPrice > 0 && user.ton < totalTonPrice) {
-        return res.json({ success: false, error: "INSUFFICIENT_TON" });
-      }
-      
-      if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) {
-        return res.json({ success: false, error: "INSUFFICIENT_GPU" });
-      }
-      
+      if (totalTonPrice > 0 && user.ton < totalTonPrice) return res.json({ success: false, error: "INSUFFICIENT_TON" });
+      if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) return res.json({ success: false, error: "INSUFFICIENT_GPU" });
       if (totalTonPrice > 0) user.ton -= totalTonPrice;
       if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
-      
       user.minerQuantities = user.minerQuantities || {};
       user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
-      
       await user.save();
-      
       console.log(`⛏️ ${user_id}: купил ${buyQuantity} x ${minerId}`);
-      
-      return res.json({ 
-        success: true, 
-        data: {
-          ton: user.ton,
-          gpu: user.gpu,
-          minerQuantities: user.minerQuantities
-        }
-      });
+      return res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, minerQuantities: user.minerQuantities } });
     }
 
-    // РЕФЕРАЛЫ
     if (action === 'getReferrals') {
-      if (!checkRateLimit(user_id, 'getReferrals', 5000, 10)) {
-        return res.status(429).json({ success: false, error: "TOO_MANY_REQUESTS" });
-      }
+      if (!checkRateLimit(user_id, 'getReferrals', 5000, 10)) return res.status(429).json({ success: false, error: "TOO_MANY_REQUESTS" });
       const user = await User.findOne({ userId: user_id });
       return res.json({ success: true, referrals: user?.invitedFriends || [] });
     }
 
-    // ПОПОЛНЕНИЕ
     if (action === 'createDeposit') {
       const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'deposit' });
       if (pendingCount >= 2) return res.status(400).json({ success: false, error: 'LIMIT_EXCEEDED' });
       const deposit = new Deposit({ userId: user_id, userName: name, amount, wallet: process.env.TON_WALLET, comment: `DEPOSIT_${user_id}_${Date.now()}`, type: 'deposit' });
       await deposit.save();
-      
-      await sendTelegramNotification(
-        `💎 <b>Заявка на пополнение!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON`,
-        [[
-          { text: "✅ Подтвердить", callback_data: `approve:deposit:${deposit._id}` },
-          { text: "❌ Отклонить", callback_data: `reject:deposit:${deposit._id}` }
-        ]]
-      );
-      
+      await sendTelegramNotification(`💎 <b>Заявка на пополнение!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON`, [[{ text: "✅ Подтвердить", callback_data: `approve:deposit:${deposit._id}` }, { text: "❌ Отклонить", callback_data: `reject:deposit:${deposit._id}` }]]);
       return res.json({ success: true, deposit: { id: deposit._id, amount, wallet: process.env.TON_WALLET } });
     }
 
-    // ПОДТВЕРЖДЕНИЕ ОПЛАТЫ
     if (action === 'confirmDeposit') {
       const deposit = await Deposit.findById(deposit_id);
       if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
-      
-      await User.updateOne(
-        { userId: deposit.userId },
-        { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } }
-      );
-      
+      await User.updateOne({ userId: deposit.userId }, { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } });
       deposit.status = 'completed';
       deposit.processedAt = new Date();
       deposit.processedBy = 'admin';
       await deposit.save();
-      
       return res.json({ success: true });
     }
 
-    // ВЫВОД
     if (action === 'createWithdraw') {
       if (!amount || amount < 1) return res.json({ success: false, error: 'Invalid amount' });
       const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'withdraw' });
@@ -798,37 +446,18 @@ app.post('/api/tg', async (req, res) => {
       await user.save();
       const withdraw = new Deposit({ userId: user_id, userName: name, amount, wallet: tonWallet, comment: `WITHDRAW_${user_id}_${Date.now()}`, type: 'withdraw' });
       await withdraw.save();
-      
-      await sendTelegramNotification(
-        `📤 <b>Заявка на вывод!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON\nКошелёк: <code>${tonWallet}</code>`,
-        [[
-          { text: "✅ Подтвердить", callback_data: `approve:withdraw:${withdraw._id}` },
-          { text: "❌ Отклонить", callback_data: `reject:withdraw:${withdraw._id}` }
-        ]]
-      );
-      
+      await sendTelegramNotification(`📤 <b>Заявка на вывод!</b>\nПользователь: <code>${user_id}</code>\nСумма: ${amount} TON\nКошелёк: <code>${tonWallet}</code>`, [[{ text: "✅ Подтвердить", callback_data: `approve:withdraw:${withdraw._id}` }, { text: "❌ Отклонить", callback_data: `reject:withdraw:${withdraw._id}` }]]);
       return res.json({ success: true });
     }
 
-    // ЗАДАНИЯ - СПИСОК
     if (action === 'tasks/list') {
       const tasks = await Task.find({ isActive: true }).sort({ order: 1 });
       const completed = await UserTask.find({ userId: user_id, claimed: true });
       const pending = await UserTask.find({ userId: user_id, claimed: false });
-      const result = tasks.map(t => ({
-        id: t.id,
-        title: t.title,
-        description: t.description,
-        rewardTon: t.rewardTon,
-        rewardGpu: t.rewardGpu,
-        taskUrl: t.taskUrl,
-        completed: completed.some(c => c.taskId === t.id),
-        pending: pending.some(p => p.taskId === t.id)
-      }));
+      const result = tasks.map(t => ({ id: t.id, title: t.title, description: t.description, rewardTon: t.rewardTon, rewardGpu: t.rewardGpu, taskUrl: t.taskUrl, completed: completed.some(c => c.taskId === t.id), pending: pending.some(p => p.taskId === t.id) }));
       return res.json({ success: true, tasks: result });
     }
 
-    // ЗАДАНИЯ - ВЫПОЛНИТЬ
     if (action === 'tasks/complete') {
       const task = await Task.findOne({ id: taskId });
       if (!task) return res.json({ success: false });
@@ -838,19 +467,8 @@ app.post('/api/tg', async (req, res) => {
       if (pending) return res.json({ success: false });
       const userTask = new UserTask({ userId: user_id, taskId, completedAt: new Date(), claimed: false });
       await userTask.save();
-      
       const user = await User.findOne({ userId: user_id });
-      await sendTelegramNotification(
-        `📋 <b>Новое выполненное задание!</b>\n` +
-        `👤 Пользователь: <code>${user_id}</code> (${user?.name || 'Игрок'})\n` +
-        `📌 Задание: ${task.title}\n` +
-        `🎁 Награда: +${task.rewardTon} TON, +${task.rewardGpu} GPU`,
-        [[
-          { text: "✅ Подтвердить", callback_data: `approve:task:${userTask._id}` },
-          { text: "❌ Отклонить", callback_data: `reject:task:${userTask._id}` }
-        ]]
-      );
-      
+      await sendTelegramNotification(`📋 <b>Новое выполненное задание!</b>\n👤 Пользователь: <code>${user_id}</code> (${user?.name || 'Игрок'})\n📌 Задание: ${task.title}\n🎁 Награда: +${task.rewardTon} TON, +${task.rewardGpu} GPU`, [[{ text: "✅ Подтвердить", callback_data: `approve:task:${userTask._id}` }, { text: "❌ Отклонить", callback_data: `reject:task:${userTask._id}` }]]);
       return res.json({ success: true });
     }
 
@@ -866,7 +484,6 @@ app.post('/admin/login', async (req, res) => {
   const { username, password } = req.body;
   const bcrypt = require('bcrypt');
   const admin = await Admin.findOne({ username });
-  
   if (admin && await bcrypt.compare(password, admin.passwordHash)) {
     req.session.admin = { username: admin.username, role: admin.role };
     return res.json({ success: true });
@@ -986,11 +603,7 @@ app.get('/admin/api/tasks', async (req, res) => {
 
 app.post('/admin/api/tasks/save', async (req, res) => {
   const { id, title, description, rewardTon, rewardGpu, type, taskUrl, isDaily, order } = req.body;
-  await Task.findOneAndUpdate(
-    { id: id || `task_${Date.now()}` },
-    { title, description, rewardTon, rewardGpu, type, taskUrl, isDaily, order, isActive: true },
-    { upsert: true }
-  );
+  await Task.findOneAndUpdate({ id: id || `task_${Date.now()}` }, { title, description, rewardTon, rewardGpu, type, taskUrl, isDaily, order, isActive: true }, { upsert: true });
   res.json({ success: true });
 });
 
@@ -1007,14 +620,7 @@ app.get('/admin/api/tasks/pending', async (req, res) => {
     const task = await Task.findOne({ id: p.taskId });
     const user = await User.findOne({ userId: p.userId });
     if (task && user) {
-      result.push({
-        id: p._id,
-        userId: p.userId,
-        userName: user.name,
-        taskTitle: task.title,
-        rewardTon: task.rewardTon,
-        rewardGpu: task.rewardGpu
-      });
+      result.push({ id: p._id, userId: p.userId, userName: user.name, taskTitle: task.title, rewardTon: task.rewardTon, rewardGpu: task.rewardGpu });
     }
   }
   res.json(result);
@@ -1038,25 +644,53 @@ app.post('/admin/api/tasks/approve', async (req, res) => {
 });
 
 // ========== ЗАПУСК ==========
-const path = require('path');
-app.use(express.static(__dirname));
-
 const PORT = process.env.PORT || 8080;
+app.use(express.static(__dirname));
 
 mongoose.connect(process.env.MONGODB_URL).then(async () => {
   console.log('✅ Connected to MongoDB');
-  
   await ensureAdminExists();
-
-  if (TELEGRAM_BOT_TOKEN) {
-    try {
-      const webhookUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/telegram/webhook`;
-      await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
-      console.log('✅ Telegram webhook set to:', webhookUrl);
-    } catch (err) {
-      console.error('❌ Webhook error:', err.message);
-    }
-  }
-
   app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
 }).catch(err => console.error('❌ MongoDB error:', err));
+
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (в конец) ==========
+const requestLimits = new Map();
+const CLAIM_LIMITS = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  const CLEANUP_AFTER_MS = 60000;
+  for (const [key, data] of requestLimits.entries()) {
+    if (data.times && data.times.length > 0) {
+      const oldestTime = data.times[0];
+      if (now - oldestTime > CLEANUP_AFTER_MS) requestLimits.delete(key);
+    } else requestLimits.delete(key);
+  }
+  for (const [key, data] of CLAIM_LIMITS.entries()) {
+    if (now - data.lastClaim > CLEANUP_AFTER_MS) CLAIM_LIMITS.delete(key);
+  }
+}, 30000);
+
+function checkRateLimit(userId, action, limitMs = 1000, maxRequests = 5) {
+  const key = `${userId}:${action}`;
+  const now = Date.now();
+  const userData = requestLimits.get(key);
+  if (userData) {
+    const recentRequests = userData.times.filter(t => now - t < limitMs);
+    userData.times = recentRequests;
+    if (recentRequests.length >= maxRequests) return false;
+    userData.times.push(now);
+  } else {
+    requestLimits.set(key, { times: [now] });
+  }
+  return true;
+}
+
+function checkClaimRateLimit(userId) {
+  const key = `claim:${userId}`;
+  const now = Date.now();
+  const userData = CLAIM_LIMITS.get(key);
+  if (userData && (now - userData.lastClaim) < 30000) return false;
+  CLAIM_LIMITS.set(key, { lastClaim: now });
+  return true;
+}
