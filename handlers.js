@@ -81,42 +81,43 @@ async function handleCallbackQuery(callbackQuery) {
   });
 
   // ========== ОБРАБОТКА ДЕПОЗИТОВ ==========
-  if (type === 'deposit') {
-    if (action === 'approve') {
-      try {
-        await axios.post(API_URL, {
-          action: 'confirmDeposit',
-          deposit_id: id,
-          user_id: from.id
-        }, {
-          headers: {
-            'x-bot-secret': TELEGRAM_BOT_TOKEN
-          }
-        });
-        console.log(`💎 Депозит ${id} подтверждён`);
-      } catch (e) {
-        console.error(`❌ Ошибка подтверждения депозита ${id}:`, e.message);
-      }
-    } else if (action === 'approve') {
-  try {
-    console.log(`📤 Отправка confirmDeposit для ${id} на ${API_URL}`);
-    const response = await axios.post(API_URL, {
-      action: 'confirmDeposit',
-      deposit_id: id,
-      user_id: from.id
-    }, {
-      headers: {
-        'x-bot-secret': TELEGRAM_BOT_TOKEN
-      }
-    });
-    console.log(`✅ Ответ сервера:`, response.data);
-    console.log(`💎 Депозит ${id} подтверждён`);
-  } catch (e) {
-    console.error(`❌ Ошибка подтверждения депозита ${id}:`, e.response?.data || e.message);
-  }
+if (type === 'deposit') {
+  if (action === 'approve') {
+    try {
+      console.log(`📤 Отправка confirmDeposit для депозита ${id}`);
+      const response = await axios.post(API_URL, {
+        action: 'confirmDeposit',
+        deposit_id: id,
+        user_id: from.id
+      }, {
+        headers: {
+          'x-bot-secret': TELEGRAM_BOT_TOKEN
+        }
+      });
+      console.log(`✅ Ответ сервера:`, response.data);
+      console.log(`💎 Депозит ${id} подтверждён`);
+    } catch (e) {
+      console.error(`❌ Ошибка подтверждения депозита ${id}:`, e.response?.data || e.message);
     }
-    
+  } else if (action === 'reject') {
+    try {
+      console.log(`📤 Отправка rejectDeposit для депозита ${id}`);
+      const response = await axios.post(API_URL, {
+        action: 'rejectDeposit',
+        deposit_id: id,
+        user_id: from.id
+      }, {
+        headers: {
+          'x-bot-secret': TELEGRAM_BOT_TOKEN
+        }
+      });
+      console.log(`✅ Ответ сервера:`, response.data);
+      console.log(`❌ Депозит ${id} отклонён`);
+    } catch (e) {
+      console.error(`❌ Ошибка отклонения депозита ${id}:`, e.response?.data || e.message);
+    }
   }
+}
 
   // ========== ОБРАБОТКА ВЫВОДОВ ==========
   if (type === 'withdraw') {
