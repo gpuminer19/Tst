@@ -14,21 +14,16 @@ async function sendMessage(chatId, text, keyboard = null) {
       text: text,
       parse_mode: 'Markdown'
     };
-
     if (keyboard) {
       payload.reply_markup = keyboard;
     }
-
-    await axios.post(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      payload
-    );
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, payload);
   } catch (error) {
     console.error('❌ Ошибка отправки:', error.message);
   }
 }
 
-// ========== КЛАВИАТУРА ==========
+// ========== КЛАВИАТУРА С КНОПКОЙ ИГРЫ ==========
 function getGameKeyboard() {
   return {
     inline_keyboard: [[{
@@ -38,11 +33,9 @@ function getGameKeyboard() {
   };
 }
 
-// ========== /START (ИСПРАВЛЕНО) ==========
+// ========== ОБРАБОТЧИК КОМАНДЫ /start ==========
 async function handleStart(chatId, userId, userName, text) {
-  // 🔧 FIX: корректно забираем payload после /start
-  const payload = text.split(' ')[1]; // /start XXXX
-
+  const payload = text.split(' ')[1];
   let referrerId = null;
 
   if (payload) {
@@ -53,7 +46,6 @@ async function handleStart(chatId, userId, userName, text) {
     }
   }
 
-  // ========== РЕФЕРАЛКА ==========
   if (referrerId && referrerId !== String(userId)) {
     try {
       await axios.post(API_URL, {
@@ -62,77 +54,123 @@ async function handleStart(chatId, userId, userName, text) {
         referrer_id: referrerId,
         name: userName
       });
-
       console.log(`👥 Реферал зарегистрирован: ${referrerId} → ${userId}`);
     } catch (e) {
       console.error('Referral error:', e.message);
     }
   }
 
-  // ========== ПРИВЕТСТВИЕ ==========
-  const welcomeText =
-`🎮 *ДОБРО ПОЖАЛОВАТЬ В CRYPTOGPU, ${userName}!*
-
-👇 *Нажми на кнопку, чтобы начать!*`;
-
+  const welcomeText = `🎮 *ДОБРО ПОЖАЛОВАТЬ В CRYPTOGPU, ${userName}!*\n\n👇 *Нажми на кнопку, чтобы начать!*`;
   await sendMessage(chatId, welcomeText, getGameKeyboard());
 }
 
-// ========== CALLBACK КНОПОК ==========
+// ========== ОБРАБОТЧИК CALLBACK-КНОПОК (ИСПРАВЛЕН) ==========
 async function handleCallbackQuery(callbackQuery) {
   const { data, message, from } = callbackQuery;
   const [action, type, id] = data.split(':');
 
   console.log(`🔘 Callback: ${action} | ${type} | ${id} от ${from.id}`);
 
-  await axios.post(
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
-    {
-      callback_query_id: callbackQuery.id,
-      text: action === 'approve' ? '✅ Подтверждено' : '❌ Отклонено'
-    }
-  );
+  await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+    callback_query_id: callbackQuery.id,
+    text: action === 'approve' ? '✅ Подтверждено' : '❌ Отклонено'
+  });
 
+  // ========== ОБРАБОТКА ДЕПОЗИТОВ ==========
   if (type === 'deposit') {
     if (action === 'approve') {
-      console.log(`💎 Депозит ${id} подтверждён`);
-    } else {
-      console.log(`❌ Депозит ${id} отклонён`);
+      try {
+        await axios.post(API_URL, {
+          action: 'confirmDeposit',
+          deposit_id: id,
+          user_id: from.id
+        });
+        console.log(`💎 Депозит ${id} подтверждён`);
+      } catch (e) {
+        console.error(`❌ Ошибка подтверждения депозита ${id}:`, e.message);
+      }
+    } else if (action === 'reject') {
+      try {
+        await axios.post(API_URL, {
+          action: 'rejectDeposit',
+          deposit_id: id,
+          user_id: from.id
+        });
+        console.log(`❌ Депозит ${id} отклонён`);
+      } catch (e) {
+        console.error(`❌ Ошибка отклонения депозита ${id}:`, e.message);
+      }
     }
   }
 
+  // ========== ОБРАБОТКА ВЫВОДОВ ==========
   if (type === 'withdraw') {
     if (action === 'approve') {
-      console.log(`📤 Вывод ${id} подтверждён`);
-    } else {
-      console.log(`❌ Вывод ${id} отклонён`);
+      try {
+        await axios.post(API_URL, {
+          action: 'approveWithdraw',
+          withdraw_id: id,
+          user_id: from.id
+        });
+        console.log(`📤 Вывод ${id} подтверждён`);
+      } catch (e) {
+        console.error(`❌ Ошибка подтверждения вывода ${id}:`, e.message);
+      }
+    } else if (action === 'reject') {
+      try {
+        await axios.post(API_URL, {
+          action: 'rejectWithdraw',
+          withdraw_id: id,
+          user_id: from.id
+        });
+        console.log(`❌ Вывод ${id} отклонён`);
+      } catch (e) {
+        console.error(`❌ Ошибка отклонения вывода ${id}:`, e.message);
+      }
     }
   }
 
+  // ========== ОБРАБОТКА ЗАДАНИЙ ==========
   if (type === 'task') {
     if (action === 'approve') {
-      console.log(`📋 Задание ${id} подтверждено`);
-    } else {
-      console.log(`❌ Задание ${id} отклонено`);
+      try {
+        await axios.post(API_URL, {
+          action: 'approveTask',
+          task_id: id,
+          user_id: from.id
+        });
+        console.log(`📋 Задание ${id} подтверждено`);
+      } catch (e) {
+        console.error(`❌ Ошибка подтверждения задания ${id}:`, e.message);
+      }
+    } else if (action === 'reject') {
+      try {
+        await axios.post(API_URL, {
+          action: 'rejectTask',
+          task_id: id,
+          user_id: from.id
+        });
+        console.log(`❌ Задание ${id} отклонено`);
+      } catch (e) {
+        console.error(`❌ Ошибка отклонения задания ${id}:`, e.message);
+      }
     }
   }
 
-  await axios.post(
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`,
-    {
-      chat_id: message.chat.id,
-      message_id: message.message_id,
-      text: message.text + '\n\n✅ Обработано!',
-      parse_mode: 'HTML'
-    }
-  );
+  // Редактируем сообщение
+  await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+    chat_id: message.chat.id,
+    message_id: message.message_id,
+    text: message.text + '\n\n✅ Обработано!',
+    parse_mode: 'HTML'
+  });
 }
 
-// ========== WEBHOOK ==========
+// ========== ГЛАВНЫЙ ОБРАБОТЧИК ВЕБХУКА ==========
 async function handleWebhook(reqBody) {
   const { message, callback_query } = reqBody;
 
-  // ===== текстовые команды =====
+  // Обработка текстовых сообщений
   if (message && message.text) {
     const chatId = message.chat.id;
     const userId = message.from.id.toString();
@@ -144,11 +182,10 @@ async function handleWebhook(reqBody) {
     if (text.startsWith('/start')) {
       await handleStart(chatId, userId, userName, text);
     }
-
     return { success: true };
   }
 
-  // ===== callback кнопки =====
+  // Обработка нажатий на кнопки
   if (callback_query) {
     await handleCallbackQuery(callback_query);
     return { success: true };
