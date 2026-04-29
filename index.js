@@ -362,6 +362,47 @@ app.post('/telegram/webhook', async (req, res) => {
   res.sendStatus(200);
 });
 
+// ========== ОБМЕН GPU НА TON ==========
+app.post('/api/exchange', async (req, res) => {
+  const { user_id, amount } = req.body;
+  
+  if (!user_id || !amount || amount <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid data' });
+  }
+  
+  try {
+    const user = await User.findOne({ userId: user_id });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (user.gpu < amount) {
+      return res.status(400).json({ success: false, error: 'Insufficient GPU' });
+    }
+    
+    const EXCHANGE_RATE = 0.001;
+    const tonReceived = amount * EXCHANGE_RATE;
+    
+    user.gpu -= amount;
+    user.ton += tonReceived;
+    await user.save();
+    
+    console.log(`🔄 ${user_id}: продал ${amount} GPU за ${tonReceived} TON`);
+    
+    res.json({ 
+      success: true, 
+      data: {
+        ton: user.ton,
+        gpu: user.gpu,
+        tonReceived: tonReceived
+      }
+    });
+  } catch (error) {
+    console.error('Exchange error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ========== API ==========
 app.post('/api/tg', async (req, res) => {
   const { action, user_id, name, referrer_id, ton, gpu, friends, accumulatedTon, accumulatedGpu, minerQuantities, amount, tonWallet, taskId, deposit_id, minerId, quantity } = req.body;
@@ -386,10 +427,8 @@ app.post('/api/tg', async (req, res) => {
         if (referrer_id && referrer_id !== user_id && referrer_id !== 'null' && referrer_id !== 'undefined') {
           const referrer = await User.findOne({ userId: referrer_id });
           if (referrer && !referrer.isBanned) {
-            // Сохраняем referrerId у нового пользователя
             user.referrerId = referrer_id;
             
-            // Добавляем друга в список пригласившего
             const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === user_id);
             if (!alreadyInvited) {
               referrer.invitedFriends.push({
@@ -872,7 +911,16 @@ mongoose.connect(process.env.MONGODB_URL).then(async () => {
   
   await ensureAdminExists();
 
-
+  // ========== УСТАНОВКА ВЕБХУКА ДЛЯ БОТА ==========
+  if (TELEGRAM_BOT_TOKEN) {
+    try {
+      const webhookUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/telegram/webhook`;
+      await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
+      console.log('✅ Telegram webhook set to:', webhookUrl);
+    } catch (err) {
+      console.error('❌ Webhook error:', err.message);
+    }
+  }
   
   app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
 }).catch(err => console.error('❌ MongoDB error:', err));
