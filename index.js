@@ -425,13 +425,68 @@ app.post('/api/tg', async (req, res) => {
     }
 
     if (action === 'createDeposit') {
+  // Проверка на лимит ожидающих заявок (не больше 2)
   const pendingCount = await Deposit.countDocuments({ userId: user_id, status: 'pending', type: 'deposit' });
-  if (pendingCount >= 2) return res.status(400).json({ success: false, error: 'LIMIT_EXCEEDED' });
-  const deposit = new Deposit({ userId: user_id, userName: name, amount, wallet: process.env.TON_WALLET, comment: `DEPOSIT_${user_id}_${Date.now()}`, type: 'deposit' });
+  if (pendingCount >= 2) {
+    return res.status(400).json({ success: false, error: 'LIMIT_EXCEEDED' });
+  }
+  
+  // Проверка суммы
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ success: false, error: 'INVALID_AMOUNT' });
+  }
+  if (amount < 1) {
+    return res.status(400).json({ success: false, error: 'MIN_AMOUNT_1_TON' });
+  }
+  if (amount > 10000) {
+    return res.status(400).json({ success: false, error: 'MAX_AMOUNT_10000_TON' });
+  }
+  
+  // Создаём заявку в базе данных
+  const deposit = new Deposit({ 
+    userId: user_id, 
+    userName: name || 'Игрок', 
+    amount: Number(amount), 
+    wallet: process.env.TON_WALLET || 'EQD...ваш_кошелек', 
+    comment: `DEPOSIT_${user_id}_${Date.now()}`,
+    type: 'deposit',
+    status: 'pending',
+    createdAt: new Date()
+  });
   await deposit.save();
-  console.log(`💎 Создана заявка на пополнение ${deposit._id} от ${user_id} на сумму ${amount} TON`);
-  return res.json({ success: true, deposit: { id: deposit._id, amount, wallet: process.env.TON_WALLET } });
-    }
+  
+  // Отправка в Telegram администратору
+  const adminMessage = 
+    `💎 <b>НОВАЯ ЗАЯВКА НА ПОПОЛНЕНИЕ</b>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `👤 <b>Пользователь:</b> <code>${user_id}</code>\n` +
+    `📛 <b>Имя:</b> ${name || 'Игрок'}\n` +
+    `💰 <b>Сумма:</b> ${amount} TON\n` +
+    `🆔 <b>ID заявки:</b> <code>${deposit._id}</code>\n` +
+    `🕐 <b>Время:</b> ${new Date().toLocaleString()}\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `⬇️ <b>Действия:</b>`;
+  
+  const keyboard = [[
+    { text: "✅ ПОДТВЕРДИТЬ", callback_data: `approve:deposit:${deposit._id}` },
+    { text: "❌ ОТКЛОНИТЬ", callback_data: `reject:deposit:${deposit._id}` }
+  ]];
+  
+  await sendTelegramNotification(adminMessage, keyboard);
+  
+  console.log(`💎 [${new Date().toISOString()}] Новая заявка: ${deposit._id} | User: ${user_id} | Amount: ${amount} TON`);
+  
+  return res.json({ 
+    success: true, 
+    deposit: { 
+      id: deposit._id, 
+      amount: Number(amount), 
+      wallet: process.env.TON_WALLET || 'EQD...ваш_кошелек',
+      comment: deposit.comment,
+      status: 'pending'
+    } 
+  });
+}
 
     if (action === 'confirmDeposit') {
   const deposit = await Deposit.findById(deposit_id);
