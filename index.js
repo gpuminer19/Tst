@@ -381,66 +381,66 @@ app.post('/api/tg', async (req, res) => {
     const banned = await User.findOne({ userId: user_id, isBanned: true });
     if (banned) return res.status(403).json({ success: false, error: 'BANNED' });
 
-    // РЕГИСТРАЦИЯ
-    if (action === 'register') {
-      let user = await User.findOne({ userId: user_id });
-      
-      if (!user) {
-        user = new User({
-          userId: user_id,
-          name: name || 'Игрок',
-          minerQuantities: { basic: 1 }
-        });
-        await user.save();
-        
-        // Обработка реферала
-        if (referrer_id && referrer_id !== user_id) {
-          const referrer = await User.findOne({ userId: referrer_id });
-          if (referrer && !referrer.isBanned) {
-            referrer.invitedFriends.push({
-              friendId: user_id,
-              friendName: name || user_id.slice(-5),
-              date: new Date().toLocaleDateString(),
-              earnedGpu: 0
-            });
-            referrer.friends = referrer.invitedFriends.length;
-            await referrer.save();
-            
-            console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
-            
-            // Проверяем, не получил ли реферер новые майнеры
-            await checkReferralMiners(referrer_id);
-          }
+// РЕГИСТРАЦИЯ
+if (action === 'register') {
+  let user = await User.findOne({ userId: user_id });
+  
+  if (!user) {
+    user = new User({
+      userId: user_id,
+      name: name || 'Игрок',
+      minerQuantities: { basic: 1 }
+    });
+    await user.save();
+    
+    // ОБРАБОТКА РЕФЕРАЛА (только если ID разные и referrer_id существует)
+    if (referrer_id && referrer_id !== user_id && referrer_id !== 'null' && referrer_id !== 'undefined') {
+      const referrer = await User.findOne({ userId: referrer_id });
+      if (referrer && !referrer.isBanned) {
+        // Проверяем, не добавляли ли уже этого друга
+        const alreadyInvited = referrer.invitedFriends.some(f => f.friendId === user_id);
+        if (!alreadyInvited) {
+          referrer.invitedFriends.push({
+            friendId: user_id,
+            friendName: name || user_id.slice(-5),
+            date: new Date().toLocaleDateString(),
+            earnedGpu: 0
+          });
+          referrer.friends = referrer.invitedFriends.length;
+          await referrer.save();
+          console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
         }
-        
-        console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
-        
-        await sendTelegramNotification(
-          `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
-        );
-      } else {
-        console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
-        await calculateOffline(user_id);
-        user = await User.findOne({ userId: user_id });
-        console.log(`📊 Накопления после входа: TON=${user.accumulatedTon.toFixed(8)}, GPU=${user.accumulatedGpu.toFixed(6)}`);
       }
-      
-      const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
-      
-      return res.json({
-        success: true,
-        data: {
-          ton: user.ton,
-          gpu: user.gpu,
-          friends: user.friends,
-          invitedFriends: user.invitedFriends || [],
-          accumulatedTon: user.accumulatedTon,
-          accumulatedGpu: user.accumulatedGpu,
-          minerQuantities: user.minerQuantities,
-          transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
-        }
-      });
     }
+    
+    console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
+    
+    await sendTelegramNotification(
+      `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
+    );
+  } else {
+    console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
+    await calculateOffline(user_id);
+    user = await User.findOne({ userId: user_id });
+    console.log(`📊 Накопления после входа: TON=${user.accumulatedTon.toFixed(8)}, GPU=${user.accumulatedGpu.toFixed(6)}`);
+  }
+  
+  const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
+  
+  return res.json({
+    success: true,
+    data: {
+      ton: user.ton,
+      gpu: user.gpu,
+      friends: user.friends,
+      invitedFriends: user.invitedFriends || [],
+      accumulatedTon: user.accumulatedTon,
+      accumulatedGpu: user.accumulatedGpu,
+      minerQuantities: user.minerQuantities,
+      transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
+    }
+  });
+}
 
     // СОХРАНЕНИЕ
     if (action === 'save') {
