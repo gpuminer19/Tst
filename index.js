@@ -914,13 +914,16 @@ mongoose.connect(process.env.MONGODB_URL).then(async () => {
   // ========== УСТАНОВКА ВЕБХУКА ДЛЯ БОТА ==========
   if (TELEGRAM_BOT_TOKEN) {
     try {
+      console.log('🔍 Токен бота:', TELEGRAM_BOT_TOKEN);
+      console.log('🔍 Домен:', process.env.RAILWAY_PUBLIC_DOMAIN);
       const webhookUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/telegram/webhook`;
-      await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
-      console.log('✅ Telegram webhook set to:', webhookUrl);
+      console.log('🔍 URL вебхука:', webhookUrl);
+      const response = await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
+      console.log('✅ Telegram webhook response:', response.data);
     } catch (err) {
-      console.error('❌ Webhook error:', err.message);
+      console.error('❌ Webhook error:', err.response?.data || err.message);
     }
   }
-  
+
   app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
 }).catch(err => console.error('❌ MongoDB error:', err));
