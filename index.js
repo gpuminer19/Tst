@@ -70,7 +70,7 @@ const userSchema = new mongoose.Schema({
     friendId: String, 
     friendName: String, 
     date: String,
-    earnedGpu: { type: Number, default: 0 }
+    earnedGpu: { type: Number, default: 0 } // сколько GPU друг накопил
   }],
   lastMiningUpdate: { type: Date, default: Date.now },
   accumulatedTon: { type: Number, default: 0 },
@@ -127,7 +127,7 @@ const Admin = mongoose.model('Admin', adminSchema);
 const Task = mongoose.model('Task', taskSchema);
 const UserTask = mongoose.model('UserTask', userTaskSchema);
 
-// ========== РЕЙТЫ МАЙНЕРОВ ==========
+// ========== РЕЙТЫ МАЙНЕРОВ (В ДЕНЬ) ==========
 const RATES = {
   basic: { ton: 0.01 / 24, gpu: 15 / 24 },
   normal: { ton: 0.02 / 24, gpu: 15 / 24 },
@@ -160,6 +160,60 @@ const MINER_LIMITS = {
   minex: null
 };
 
+// УСЛОВИЯ ДЛЯ РЕФЕРАЛЬНЫХ МАЙНЕРОВ
+const REFERRAL_MINER_REQUIREMENTS = {
+  friend: { requiredActive: 10, requiredEarned: 30 },  // 10 друзей, каждый накопил 30 GPU
+  bro: { requiredActive: 50, requiredEarned: 30 },     // 50 друзей, каждый накопил 30 GPU
+  nexus: { requiredActive: 150, requiredEarned: 30 }   // 150 друзей, каждый накопил 30 GPU
+};
+
+// ========== ПРОВЕРКА РЕФЕРАЛЬНЫХ МАЙНЕРОВ ==========
+async function checkReferralMiners(userId) {
+  const user = await User.findOne({ userId });
+  if (!user) return;
+  
+  const activeFriendsCount = user.invitedFriends.filter(f => (f.earnedGpu || 0) >= 30).length;
+  
+  let updated = false;
+  
+  // Проверяем Friend Miner (10 активных друзей)
+  if (activeFriendsCount >= 10 && !user.minerQuantities?.friend) {
+    user.minerQuantities = user.minerQuantities || {};
+    user.minerQuantities.friend = 1;
+    updated = true;
+    console.log(`🎁 ${userId}: получен Friend Miner (10 активных друзей)`);
+    await sendTelegramNotification(
+      `🎁 <b>Получен Friend Miner!</b>\nПользователь: <code>${userId}</code>\nУсловие: 10 друзей с 30+ GPU`
+    );
+  }
+  
+  // Проверяем Bro Miner (50 активных друзей)
+  if (activeFriendsCount >= 50 && !user.minerQuantities?.bro) {
+    user.minerQuantities = user.minerQuantities || {};
+    user.minerQuantities.bro = 1;
+    updated = true;
+    console.log(`🎁 ${userId}: получен Bro Miner (50 активных друзей)`);
+    await sendTelegramNotification(
+      `🎁 <b>Получен Bro Miner!</b>\nПользователь: <code>${userId}</code>\nУсловие: 50 друзей с 30+ GPU`
+    );
+  }
+  
+  // Проверяем Nexus Miner (150 активных друзей)
+  if (activeFriendsCount >= 150 && !user.minerQuantities?.nexus) {
+    user.minerQuantities = user.minerQuantities || {};
+    user.minerQuantities.nexus = 1;
+    updated = true;
+    console.log(`🎁 ${userId}: получен Nexus Miner (150 активных друзей)`);
+    await sendTelegramNotification(
+      `🎁 <b>Получен Nexus Miner!</b>\nПользователь: <code>${userId}</code>\nУсловие: 150 друзей с 30+ GPU`
+    );
+  }
+  
+  if (updated) {
+    await user.save();
+  }
+}
+
 // ========== ФУНКЦИЯ ОФЛАЙН-НАКОПЛЕНИЙ ==========
 async function calculateOffline(userId) {
   const user = await User.findOne({ userId });
@@ -180,7 +234,7 @@ async function calculateOffline(userId) {
 
   for (const [minerId, qty] of Object.entries(user.minerQuantities || {})) {
     const rate = RATES[minerId];
-    if (rate && qty > 0 && !rate.isReferral) {
+    if (rate && qty > 0) {
       earnedTon += rate.ton * qty * hoursPassed;
       earnedGpu += rate.gpu * qty * hoursPassed;
     }
@@ -196,20 +250,38 @@ async function calculateOffline(userId) {
   console.log(`📊 ${userId}: офлайн-накоплено +${earnedTon.toFixed(8)} TON, +${earnedGpu.toFixed(6)} GPU за ${hoursPassed.toFixed(4)}ч`);
 }
 
-// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
-async function addEarnedGpuToReferrer(userId, earnedGpu) {
-  if (!earnedGpu || earnedGpu <= 0) return;
+// ========== НАЧИСЛЕНИЕ 2% РЕФЕРЕРУ ПРИ КЛЕЙМЕ ==========
+async function giveReferralCommission(userId, claimedTon, claimedGpu) {
+  if (!claimedTon && !claimedGpu) return;
+  
+  // Ищем того, кто пригласил этого пользователя
   const referrer = await User.findOne({ "invitedFriends.friendId": userId });
-  if (referrer) {
+  if (!referrer) return;
+  
+  // 2% комиссия
+  const commissionTon = claimedTon * 0.02;
+  const commissionGpu = claimedGpu * 0.02;
+  
+  if (commissionTon > 0 || commissionGpu > 0) {
+    referrer.ton += commissionTon;
+    referrer.gpu += commissionGpu;
+    await referrer.save();
+    
+    console.log(`👥 Рефереру ${referrer.userId} начислено ${commissionTon.toFixed(6)} TON (+2%) и ${commissionGpu.toFixed(4)} GPU (+2%) за клейм ${userId}`);
+    
+    // Обновляем earnedGpu друга
     const friend = referrer.invitedFriends.find(f => f.friendId === userId);
     if (friend) {
-      friend.earnedGpu = (friend.earnedGpu || 0) + earnedGpu;
+      friend.earnedGpu = (friend.earnedGpu || 0) + claimedGpu;
       await referrer.save();
-      console.log(`👥 Рефереру ${referrer.userId} начислено +${earnedGpu} GPU за активность друга`);
     }
+    
+    // Проверяем, не получил ли реферер новые реферальные майнеры
+    await checkReferralMiners(referrer.userId);
   }
 }
 
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 async function ensureAdminExists() {
   const bcrypt = require('bcrypt');
   const existing = await Admin.findOne({ username: process.env.ADMIN_USER });
@@ -228,70 +300,75 @@ app.post('/telegram/webhook', async (req, res) => {
   const { data, message } = callback_query;
   const [action, type, id] = data.split(':');
   
-  await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-    callback_query_id: callback_query.id,
-    text: action === 'approve' ? '✅ Подтверждено' : '❌ Отклонено'
-  });
-  
-  if (type === 'deposit') {
-    if (action === 'approve') {
-      const deposit = await Deposit.findById(id);
-      if (deposit && deposit.status === 'pending') {
-        await User.updateOne(
-          { userId: deposit.userId },
-          { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } }
-        );
-        deposit.status = 'completed';
-        deposit.processedAt = new Date();
-        deposit.processedBy = 'telegram';
-        await deposit.save();
-      }
-    } else {
-      await Deposit.findByIdAndUpdate(id, { status: 'cancelled' });
-    }
-  }
-  
-  if (type === 'withdraw') {
-    if (action === 'approve') {
-      await Deposit.findByIdAndUpdate(id, { status: 'completed', processedAt: new Date(), processedBy: 'telegram' });
-    } else {
-      const withdraw = await Deposit.findById(id);
-      if (withdraw && withdraw.status === 'pending') {
-        await User.updateOne(
-          { userId: withdraw.userId },
-          { $inc: { ton: withdraw.amount } }
-        );
+  try {
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      callback_query_id: callback_query.id,
+      text: action === 'approve' ? '✅ Подтверждено' : '❌ Отклонено'
+    });
+    
+    if (type === 'deposit') {
+      if (action === 'approve') {
+        const deposit = await Deposit.findById(id);
+        if (deposit && deposit.status === 'pending') {
+          await User.updateOne(
+            { userId: deposit.userId },
+            { $inc: { ton: deposit.amount, totalDeposited: deposit.amount } }
+          );
+          deposit.status = 'completed';
+          deposit.processedAt = new Date();
+          deposit.processedBy = 'telegram';
+          await deposit.save();
+        }
+      } else {
         await Deposit.findByIdAndUpdate(id, { status: 'cancelled' });
       }
     }
-  }
-  
-  if (type === 'task') {
-    if (action === 'approve') {
-      const userTask = await UserTask.findById(id);
-      if (userTask && !userTask.claimed) {
-        const task = await Task.findOne({ id: userTask.taskId });
-        const user = await User.findOne({ userId: userTask.userId });
-        if (user && task) {
-          user.ton += task.rewardTon;
-          user.gpu += task.rewardGpu;
-          await user.save();
-          await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
+    
+    if (type === 'withdraw') {
+      if (action === 'approve') {
+        await Deposit.findByIdAndUpdate(id, { status: 'completed', processedAt: new Date(), processedBy: 'telegram' });
+      } else {
+        const withdraw = await Deposit.findById(id);
+        if (withdraw && withdraw.status === 'pending') {
+          await User.updateOne(
+            { userId: withdraw.userId },
+            { $inc: { ton: withdraw.amount } }
+          );
+          await Deposit.findByIdAndUpdate(id, { status: 'cancelled' });
         }
-        userTask.claimed = true;
-        await userTask.save();
       }
-    } else if (action === 'reject') {
-      await UserTask.findByIdAndDelete(id);
     }
+    
+    if (type === 'task') {
+      if (action === 'approve') {
+        const userTask = await UserTask.findById(id);
+        if (userTask && !userTask.claimed) {
+          const task = await Task.findOne({ id: userTask.taskId });
+          const user = await User.findOne({ userId: userTask.userId });
+          if (user && task) {
+            user.ton += task.rewardTon;
+            user.gpu += task.rewardGpu;
+            await user.save();
+            // Начисляем 2% комиссию рефереру за награду с задания
+            await giveReferralCommission(userTask.userId, task.rewardTon, task.rewardGpu);
+          }
+          userTask.claimed = true;
+          await userTask.save();
+        }
+      } else if (action === 'reject') {
+        await UserTask.findByIdAndDelete(id);
+      }
+    }
+    
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+      chat_id: message.chat.id,
+      message_id: message.message_id,
+      text: message.text + '\n\n✅ Обработано!',
+      parse_mode: 'HTML'
+    });
+  } catch (error) {
+    console.error('Webhook error:', error);
   }
-  
-  await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
-    chat_id: message.chat.id,
-    message_id: message.message_id,
-    text: message.text + '\n\n✅ Обработано!',
-    parse_mode: 'HTML'
-  });
   
   res.sendStatus(200);
 });
@@ -306,75 +383,38 @@ app.post('/api/tg', async (req, res) => {
 
     // РЕГИСТРАЦИЯ
     if (action === 'register') {
-  let user = await User.findOne({ userId: user_id });
-  
-  if (!user) {
-    user = new User({
-      userId: user_id,
-      name: name || 'Игрок',
-      minerQuantities: { basic: 1 }
-    });
-    await user.save(); // Сначала сохраняем нового пользователя
-    
-    // ========== ИСПРАВЛЕНИЕ РЕФЕРАЛЬНОЙ СИСТЕМЫ ==========
-    if (referrer_id && referrer_id !== user_id) {
-      const referrer = await User.findOne({ userId: referrer_id });
-      if (referrer && !referrer.isBanned) {
-        // Добавляем друга в список приглашенных
-        referrer.invitedFriends.push({
-          friendId: user_id,
-          friendName: name || user_id.slice(-5),
-          date: new Date().toLocaleDateString(),
-          earnedGpu: 0
+      let user = await User.findOne({ userId: user_id });
+      
+      if (!user) {
+        user = new User({
+          userId: user_id,
+          name: name || 'Игрок',
+          minerQuantities: { basic: 1 }
         });
-        referrer.friends = referrer.invitedFriends.length;
+        await user.save();
         
-        // ========== НАЧИСЛЯЕМ БОНУС РЕФЕРЕРУ ==========
-        const REFERRAL_BONUS_GPU = 50;   // 50 GPU за регистрацию
-        const REFERRAL_BONUS_TON = 0.5;  // 0.5 TON за регистрацию
+        // Обработка реферала
+        if (referrer_id && referrer_id !== user_id) {
+          const referrer = await User.findOne({ userId: referrer_id });
+          if (referrer && !referrer.isBanned) {
+            referrer.invitedFriends.push({
+              friendId: user_id,
+              friendName: name || user_id.slice(-5),
+              date: new Date().toLocaleDateString(),
+              earnedGpu: 0
+            });
+            referrer.friends = referrer.invitedFriends.length;
+            await referrer.save();
+            
+            console.log(`👥 Реферал: ${referrer_id} → ${user_id}`);
+            
+            // Проверяем, не получил ли реферер новые майнеры
+            await checkReferralMiners(referrer_id);
+          }
+        }
         
-        referrer.gpu += REFERRAL_BONUS_GPU;
-        referrer.ton += REFERRAL_BONUS_TON;
+        console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
         
-        await referrer.save();
-        
-        console.log(`👥 Реферал ${referrer_id} получил бонус +${REFERRAL_BONUS_GPU} GPU, +${REFERRAL_BONUS_TON} TON за приглашение ${user_id}`);
-        
-        // Отправляем уведомление админу
-        await sendTelegramNotification(
-          `🎁 <b>Реферальный бонус!</b>\nРеферер: <code>${referrer_id}</code>\nНовый друг: <code>${user_id}</code>\nБонус: +${REFERRAL_BONUS_GPU} GPU, +${REFERRAL_BONUS_TON} TON`
-        );
-      }
-    }
-    
-    console.log(`🆕 Новый пользователь: ${user_id} (${user.name})`);
-    
-    await sendTelegramNotification(
-      `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
-    );
-  } else {
-    console.log(`👤 Вход пользователя: ${user_id} (${user.name})`);
-    await calculateOffline(user_id);
-    user = await User.findOne({ userId: user_id });
-    console.log(`📊 Накопления после входа: TON=${user.accumulatedTon.toFixed(8)}, GPU=${user.accumulatedGpu.toFixed(6)}`);
-  }
-  
-  const transactions = await Deposit.find({ userId: user_id }).sort({ createdAt: -1 }).limit(50);
-  
-  return res.json({
-    success: true,
-    data: {
-      ton: user.ton,
-      gpu: user.gpu,
-      friends: user.friends,
-      invitedFriends: user.invitedFriends || [],
-      accumulatedTon: user.accumulatedTon,
-      accumulatedGpu: user.accumulatedGpu,
-      minerQuantities: user.minerQuantities,
-      transactions: transactions.map(t => ({ id: t._id, amount: t.amount, type: t.type, status: t.status, createdAt: t.createdAt }))
-    }
-  });
-}
         await sendTelegramNotification(
           `🆕 <b>Новый игрок!</b>\nID: <code>${user_id}</code>\nИмя: ${name || 'Игрок'}`
         );
@@ -402,7 +442,7 @@ app.post('/api/tg', async (req, res) => {
       });
     }
 
-    // СОХРАНЕНИЕ (только для сбора награды и банальных обновлений)
+    // СОХРАНЕНИЕ
     if (action === 'save') {
       const existingUser = await User.findOne({ userId: user_id });
       if (!existingUser) return res.json({ success: false, error: "User not found" });
@@ -450,9 +490,8 @@ app.post('/api/tg', async (req, res) => {
       user.accumulatedGpu = 0;
       await user.save();
       
-      if (rewardGpu > 0) {
-        await addEarnedGpuToReferrer(user_id, rewardGpu);
-      }
+      // НАЧИСЛЯЕМ 2% РЕФЕРЕРУ
+      await giveReferralCommission(user_id, rewardTon, rewardGpu);
       
       console.log(`🎁 ${user_id}: собрал награду +${rewardTon.toFixed(8)} TON, +${rewardGpu.toFixed(6)} GPU`);
       
@@ -501,15 +540,12 @@ app.post('/api/tg', async (req, res) => {
         return res.json({ success: false, error: "INSUFFICIENT_GPU" });
       }
       
-      // Списываем цену
       if (totalTonPrice > 0) user.ton -= totalTonPrice;
       if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
       
-      // Добавляем майнера
       user.minerQuantities = user.minerQuantities || {};
       user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
       
-      // Сохраняем
       await User.updateOne(
         { userId: user_id },
         { 
@@ -557,7 +593,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, deposit: { id: deposit._id, amount, wallet: process.env.TON_WALLET } });
     }
 
-    // ПОДТВЕРЖДЕНИЕ ОПЛАТЫ (через админку)
+    // ПОДТВЕРЖДЕНИЕ ОПЛАТЫ
     if (action === 'confirmDeposit') {
       const deposit = await Deposit.findById(deposit_id);
       if (!deposit || deposit.status !== 'pending') return res.json({ success: false });
@@ -645,19 +681,25 @@ app.post('/api/tg', async (req, res) => {
     return res.status(400).json({ success: false });
   } catch (error) {
     console.error('API Error:', error);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // ========== АДМИН-ПАНЕЛЬ ==========
-// ВРЕМЕННАЯ АВТОРИЗАЦИЯ - ПРОПУСКАЕТ ЛЮБОЙ ЛОГИН/ПАРОЛЬ
-app.post('/admin/login', (req, res) => {
-  console.log('🔓 Админ-вход (временный режим)');
-  return res.json({ success: true });
+app.post('/admin/login', async (req, res) => {
+  const { username, password } = req.body;
+  const bcrypt = require('bcrypt');
+  const admin = await Admin.findOne({ username });
+  
+  if (admin && await bcrypt.compare(password, admin.passwordHash)) {
+    req.session.admin = { username: admin.username, role: admin.role };
+    return res.json({ success: true });
+  }
+  return res.status(401).json({ success: false });
 });
 
 app.get('/admin/check', (req, res) => {
-  res.json({ loggedIn: true });
+  res.json({ loggedIn: !!req.session.admin });
 });
 
 app.post('/admin/logout', (req, res) => {
@@ -683,7 +725,6 @@ app.post('/admin/api/user/giveGpu', async (req, res) => {
   if (!user) return res.json({ success: false });
   user.gpu += amount;
   await user.save();
-  await addEarnedGpuToReferrer(userId, amount);
   res.json({ success: true });
 });
 
@@ -817,7 +858,7 @@ app.post('/admin/api/tasks/approve', async (req, res) => {
     user.ton += task.rewardTon;
     user.gpu += task.rewardGpu;
     await user.save();
-    await addEarnedGpuToReferrer(userTask.userId, task.rewardGpu);
+    await giveReferralCommission(userTask.userId, task.rewardTon, task.rewardGpu);
   }
   userTask.claimed = true;
   await userTask.save();
@@ -845,7 +886,7 @@ mongoose.connect(process.env.MONGODB_URL).then(async () => {
   
   if (TELEGRAM_BOT_TOKEN) {
     try {
-      await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://tst-production-c55e.up.railway.app/telegram/webhook`);
+      await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${process.env.RAILWAY_PUBLIC_DOMAIN}/telegram/webhook`);
       console.log('✅ Telegram webhook set');
     } catch (err) {
       console.error('❌ Webhook error:', err.message);
