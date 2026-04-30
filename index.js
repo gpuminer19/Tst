@@ -898,6 +898,115 @@ app.post('/admin/api/tasks/approve', async (req, res) => {
   res.json({ success: true });
 });
 
+// ========== РАССЫЛКА В АДМИН-ПАНЕЛИ ==========
+
+// Состояние рассылки (для отслеживания прогресса)
+let broadcastState = {
+  isRunning: false,
+  total: 0,
+  sent: 0,
+  failed: 0,
+  users: []
+};
+
+// Эндпоинт для отправки рассылки
+app.post('/admin/api/broadcast', async (req, res) => {
+  if (!req.session.admin) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  
+  const { message, parse_mode = 'HTML', confirm } = req.body;
+  
+  if (!message || message.trim().length === 0) {
+    return res.status(400).json({ success: false, error: 'Message is required' });
+  }
+  
+  // Если это не подтверждение, а просто проверка
+  if (!confirm) {
+    const userCount = await User.countDocuments({ isBanned: false });
+    return res.json({ success: true, preview: true, userCount });
+  }
+  
+  // Проверяем, не запущена ли уже рассылка
+  if (broadcastState.isRunning) {
+    return res.status(400).json({ success: false, error: 'Broadcast already running' });
+  }
+  
+  try {
+    // Получаем всех активных пользователей
+    const users = await User.find({ isBanned: false }, 'userId name');
+    
+    broadcastState = {
+      isRunning: true,
+      total: users.length,
+      sent: 0,
+      failed: 0,
+      users: users
+    };
+    
+    res.json({ success: true, message: 'Broadcast started', total: users.length });
+    
+    // Отправляем сообщения в фоне
+    for (const user of broadcastState.users) {
+      if (!broadcastState.isRunning) break;
+      
+      try {
+        await sendTelegramNotification(message, null, user.userId);
+        broadcastState.sent++;
+      } catch (err) {
+        broadcastState.failed++;
+        console.error(`Failed to send to ${user.userId}:`, err.message);
+      }
+      
+      // Задержка чтобы не превысить лимиты Telegram
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    // Отправляем финальный отчёт админу
+    await sendTelegramNotification(
+      `✅ <b>РАССЫЛКА ЗАВЕРШЕНА</b>\n\n📨 Отправлено: ${broadcastState.sent}\n❌ Ошибок: ${broadcastState.failed}\n👥 Всего: ${broadcastState.total}`,
+      null,
+      process.env.ADMIN_CHAT_ID
+    );
+    
+    broadcastState.isRunning = false;
+    
+  } catch (error) {
+    console.error('Broadcast error:', error);
+    broadcastState.isRunning = false;
+    await sendTelegramNotification(`❌ Ошибка рассылки: ${error.message}`, null, process.env.ADMIN_CHAT_ID);
+  }
+});
+
+// Эндпоинт для получения статуса рассылки
+app.get('/admin/api/broadcast/status', async (req, res) => {
+  if (!req.session.admin) {
+    return res.status(401).json({ success: false });
+  }
+  
+  res.json({
+    isRunning: broadcastState.isRunning,
+    total: broadcastState.total,
+    sent: broadcastState.sent,
+    failed: broadcastState.failed,
+    completed: !broadcastState.isRunning && broadcastState.total > 0
+  });
+});
+
+// Эндпоинт для остановки рассылки
+app.post('/admin/api/broadcast/stop', async (req, res) => {
+  if (!req.session.admin) {
+    return res.status(401).json({ success: false });
+  }
+  
+  if (!broadcastState.isRunning) {
+    return res.status(400).json({ success: false, error: 'No broadcast running' });
+  }
+  
+  broadcastState.isRunning = false;
+  res.json({ success: true });
+});
+
 // ========== ЗАПУСК ==========
 const PORT = process.env.PORT || 8080;
 app.use(express.static(__dirname));
