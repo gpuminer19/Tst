@@ -41,6 +41,20 @@
   .miner-tag { background: #00D4FF20; padding: 4px 8px; border-radius: 20px; font-size: 11px; }
   .pending-count { background: #FF8C00; border-radius: 20px; padding: 2px 8px; font-size: 11px; margin-left: 8px; }
   .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #0B0E1A; padding: 10px; text-align: center; font-size: 10px; color: #5A6A8A; }
+  
+  /* Стили для рассылки */
+  .broadcast-stats { background: #0B0E1A; border-radius: 16px; padding: 12px; margin-bottom: 16px; }
+  .broadcast-stats div { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .preview-box { background: #0B0E1A; border-radius: 16px; padding: 16px; margin-top: 16px; border-left: 3px solid #00FFAA; }
+  .preview-box h4 { color: #00FFAA; margin-bottom: 8px; font-size: 13px; }
+  .preview-content { font-size: 13px; line-height: 1.4; color: #ddd; }
+  .format-buttons { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .format-btn { background: #00D4FF20; border: 1px solid #00D4FF40; border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; }
+  .format-btn:hover { background: #00D4FF40; }
+  textarea { width: 100%; background: #0B0E1A; border: 1px solid #00D4FF; border-radius: 16px; padding: 12px; color: #fff; font-family: monospace; font-size: 13px; resize: vertical; margin-bottom: 12px; }
+  .broadcast-progress { background: #1A1F35; border-radius: 16px; padding: 16px; margin-top: 16px; display: none; }
+  .progress-bar { width: 100%; height: 6px; background: #0B0E1A; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+  .progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00D4FF, #00FFAA); transition: width 0.3s; }
 </style>
 </head>
 <body>
@@ -74,6 +88,7 @@
     <button class="tab-btn" onclick="showTab('withdraws')">📤 Выводы</button>
     <button class="tab-btn" onclick="showTab('tasks')">📋 Задания</button>
     <button class="tab-btn" onclick="showTab('pendingTasks')">⏳ Ждут проверки</button>
+    <button class="tab-btn" onclick="showTab('broadcast')">📢 Рассылка</button>
   </div>
 
   <div id="tab-users" class="tab-content active">
@@ -88,6 +103,46 @@
     <div id="tasksList"></div>
   </div>
   <div id="tab-pendingTasks" class="tab-content"><div id="pendingTasksList"></div></div>
+
+  <!-- Вкладка рассылки -->
+  <div id="tab-broadcast" class="tab-content">
+    <div style="background: #1A1F35; border-radius: 20px; padding: 20px; margin-bottom: 16px;">
+      <h3 style="margin-bottom: 16px;">📢 Массовая рассылка</h3>
+      
+      <div class="broadcast-stats" id="broadcastStats">
+        <div><span>👥 Всего пользователей:</span><span id="broadcastTotalUsers" style="color: #00D4FF;">0</span></div>
+        <div><span>✅ Активные (не забанены):</span><span id="broadcastActiveUsers" style="color: #00FFAA;">0</span></div>
+        <div><span>🚫 Забанены:</span><span id="broadcastBannedUsers" style="color: #FF8C00;">0</span></div>
+      </div>
+      
+      <div class="format-buttons">
+        <button class="format-btn" onclick="insertTag('b')"><b>Bold</b></button>
+        <button class="format-btn" onclick="insertTag('i')"><i>Italic</i></button>
+        <button class="format-btn" onclick="insertTag('code')">Code</button>
+        <button class="format-btn" onclick="insertTag('pre')">Pre</button>
+        <button class="format-btn" onclick="insertLink()">🔗 Ссылка</button>
+        <button class="format-btn" onclick="clearMessage()">🗑️ Очистить</button>
+      </div>
+      
+      <textarea id="broadcastMessage" rows="6" placeholder="Введите текст рассылки...&#10;&#10;Поддерживается HTML:&#10;&lt;b&gt;Жирный&lt;/b&gt;, &lt;i&gt;Курсив&lt;/i&gt;, &lt;a href=&quot;https://...&quot;&gt;Ссылка&lt;/a&gt;"></textarea>
+      
+      <div class="preview-box" id="previewBox" style="display: none;">
+        <h4>👁️ Предпросмотр</h4>
+        <div class="preview-content" id="previewContent"></div>
+      </div>
+      
+      <div class="button-group" style="margin-top: 16px;">
+        <button class="btn btn-info" onclick="previewMessage()">👁️ Предпросмотр</button>
+        <button class="btn btn-success" onclick="startBroadcast()">🚀 Начать рассылку</button>
+      </div>
+      
+      <div class="broadcast-progress" id="broadcastProgress">
+        <div id="progressStatus">⏳ Отправка...</div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div id="progressStats" style="font-size: 12px; margin-top: 8px;"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="footer">CryptoGPU Admin Panel v2.0</div>
 </div>
@@ -128,6 +183,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
 <script>
 const API_URL = window.location.origin;
+let currentBroadcastAbort = null;
 
 async function adminLogin() {
   const username = document.getElementById('loginUsername').value;
@@ -162,6 +218,7 @@ function showTab(tabName) {
   if (tabName === 'withdraws') loadWithdraws();
   if (tabName === 'tasks') loadTasks();
   if (tabName === 'pendingTasks') loadPendingTasks();
+  if (tabName === 'broadcast') loadBroadcastStats();
 }
 
 async function loadAll() {
@@ -182,6 +239,16 @@ async function loadStats() {
   const withdraws = await fetch(`${API_URL}/admin/api/withdraws/pending`).then(r => r.json());
   document.getElementById('pendingDeposits').innerText = deposits.length;
   document.getElementById('pendingWithdraws').innerText = withdraws.length;
+}
+
+async function loadBroadcastStats() {
+  const users = await fetch(`${API_URL}/admin/api/users`).then(r => r.json());
+  const total = users.length;
+  const active = users.filter(u => !u.isBanned).length;
+  const banned = users.filter(u => u.isBanned).length;
+  document.getElementById('broadcastTotalUsers').innerText = total;
+  document.getElementById('broadcastActiveUsers').innerText = active;
+  document.getElementById('broadcastBannedUsers').innerText = banned;
 }
 
 async function loadUsers() {
@@ -224,7 +291,7 @@ function searchUsers() {
 }
 
 function formatDate(d) { return new Date(d).toLocaleString(); }
-function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'; }); }
+function escapeHtml(str) { return String(str).replace(/[&<>]/g, function(m) { return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'; }); }
 
 function editUser(userId, ton, gpu) {
   document.getElementById('editUserId').value = userId;
@@ -382,7 +449,146 @@ async function deleteTask(id) {
   loadTasks();
 }
 
-setInterval(() => { if (document.getElementById('adminPanel').style.display !== 'none') loadStats(); }, 30000);
+// ========== ФУНКЦИИ РАССЫЛКИ ==========
+function insertTag(tag) {
+  const textarea = document.getElementById('broadcastMessage');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  const selectedText = text.substring(start, end) || 'текст';
+  const replacement = `<${tag}>${selectedText}</${tag}>`;
+  textarea.value = text.substring(0, start) + replacement + text.substring(end);
+  textarea.focus();
+  previewMessage();
+}
+
+function insertLink() {
+  const url = prompt('Введите URL ссылки:', 'https://');
+  if (!url) return;
+  const textarea = document.getElementById('broadcastMessage');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  const selectedText = text.substring(start, end) || 'ссылка';
+  const replacement = `<a href="${url}">${selectedText}</a>`;
+  textarea.value = text.substring(0, start) + replacement + text.substring(end);
+  textarea.focus();
+  previewMessage();
+}
+
+function clearMessage() {
+  if (confirm('Очистить текст сообщения?')) {
+    document.getElementById('broadcastMessage').value = '';
+    document.getElementById('previewBox').style.display = 'none';
+  }
+}
+
+function previewMessage() {
+  const message = document.getElementById('broadcastMessage').value;
+  const previewBox = document.getElementById('previewBox');
+  const previewContent = document.getElementById('previewContent');
+  
+  if (message.trim()) {
+    previewBox.style.display = 'block';
+    previewContent.innerHTML = message.replace(/\n/g, '<br>');
+  } else {
+    previewBox.style.display = 'none';
+  }
+}
+
+async function startBroadcast() {
+  const message = document.getElementById('broadcastMessage').value;
+  
+  if (!message.trim()) {
+    alert('❌ Введите текст сообщения!');
+    return;
+  }
+  
+  const activeUsers = parseInt(document.getElementById('broadcastActiveUsers').innerText);
+  if (!confirm(`⚠️ ВНИМАНИЕ!\n\nСообщение получат ${activeUsers} активных пользователей.\n\nВы уверены, что хотите отправить рассылку?`)) {
+    return;
+  }
+  
+  const progressDiv = document.getElementById('broadcastProgress');
+  const progressFill = document.getElementById('progressFill');
+  const progressStats = document.getElementById('progressStats');
+  const progressStatus = document.getElementById('progressStatus');
+  
+  progressDiv.style.display = 'block';
+  progressFill.style.width = '0%';
+  progressStats.innerText = 'Подготовка...';
+  
+  try {
+    const response = await fetch(`${API_URL}/admin/api/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        message: message, 
+        parse_mode: 'HTML',
+        confirm: true 
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      progressStatus.innerText = '✅ Рассылка запущена!';
+      progressStats.innerText = `📨 Отправлено: 0 / ${result.total}`;
+      
+      // Имитация прогресса
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress = Math.min(progress + 5, 90);
+        progressFill.style.width = `${progress}%`;
+      }, 1000);
+      
+      // Проверяем статус каждые 3 секунды
+      const checkInterval = setInterval(async () => {
+        const statusRes = await fetch(`${API_URL}/admin/api/broadcast/status`);
+        const status = await statusRes.json();
+        if (status.completed) {
+          clearInterval(interval);
+          clearInterval(checkInterval);
+          progressFill.style.width = '100%';
+          progressStatus.innerText = '✅ Рассылка завершена!';
+          progressStats.innerText = `📨 Отправлено: ${status.sent} / ${status.total} | ❌ Ошибок: ${status.failed}`;
+          setTimeout(() => {
+            progressDiv.style.display = 'none';
+          }, 3000);
+        } else if (status.sent) {
+          const percent = (status.sent / status.total) * 100;
+          progressFill.style.width = `${percent}%`;
+          progressStats.innerText = `📨 Отправлено: ${status.sent} / ${status.total} | ❌ Ошибок: ${status.failed || 0}`;
+        }
+      }, 3000);
+      
+      setTimeout(() => {
+        clearInterval(interval);
+        clearInterval(checkInterval);
+        progressFill.style.width = '100%';
+        progressStatus.innerText = '✅ Рассылка завершена!';
+        setTimeout(() => {
+          progressDiv.style.display = 'none';
+        }, 3000);
+      }, 60000);
+      
+    } else {
+      alert('❌ Ошибка: ' + (result.error || 'Неизвестная ошибка'));
+      progressDiv.style.display = 'none';
+    }
+  } catch (error) {
+    console.error('Broadcast error:', error);
+    alert('❌ Ошибка соединения с сервером');
+    progressDiv.style.display = 'none';
+  }
+}
+
+setInterval(() => { 
+  if (document.getElementById('adminPanel').style.display !== 'none') {
+    loadStats();
+    loadBroadcastStats();
+  }
+}, 30000);
 </script>
 </body>
 </html>
