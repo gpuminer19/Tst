@@ -819,12 +819,39 @@ app.post('/admin/api/user/giveTon', async (req, res) => {
 
 app.post('/admin/api/user/giveMiner', async (req, res) => {
   const { userId, minerId, quantity } = req.body;
+  console.log(`📦 [ВЫДАЧА МАЙНЕРА] Пользователь: ${userId}, Майнер: ${minerId}, Кол-во: ${quantity}`);
+  
+  // Список допустимых майнеров
+  const validMiners = ['basic', 'normal', 'pro', 'ultra', 'legendary', 'minex', 'friend', 'bro', 'nexus'];
+  
+  if (!validMiners.includes(minerId)) {
+    console.log(`❌ [ВЫДАЧА МАЙНЕРА] Неверный ID майнера: ${minerId}`);
+    return res.json({ success: false, error: 'Invalid miner ID' });
+  }
+  
   const user = await User.findOne({ userId });
-  if (!user) return res.json({ success: false });
+  if (!user) {
+    console.log(`❌ [ВЫДАЧА МАЙНЕРА] Пользователь не найден: ${userId}`);
+    return res.json({ success: false, error: 'User not found' });
+  }
+  
+  // Выдаём майнер
   user.minerQuantities = user.minerQuantities || {};
-  user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + quantity;
+  const oldQuantity = user.minerQuantities[minerId] || 0;
+  user.minerQuantities[minerId] = oldQuantity + (quantity || 1);
+  
+  // Важно: помечаем поле как изменённое для MongoDB
+  user.markModified('minerQuantities');
+  
   await user.save();
-  res.json({ success: true });
+  
+  console.log(`✅ [ВЫДАЧА МАЙНЕРА] Успешно! ${minerId}: ${oldQuantity} → ${user.minerQuantities[minerId]}`);
+  
+  res.json({ 
+    success: true, 
+    message: `Выдано ${quantity || 1} ${minerId}`,
+    newQuantity: user.minerQuantities[minerId]
+  });
 });
 
 app.post('/admin/api/user/setBalance', async (req, res) => {
