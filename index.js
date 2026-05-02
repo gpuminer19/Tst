@@ -529,7 +529,7 @@ if (action === 'buy') {
 
     // ========== СОЗДАНИЕ ВЫВОДА ==========
     if (action === 'createWithdraw') {
-      if (!amount || amount <= 0 || amount < 5 || amount > 5000) {
+      if (!amount || amount <= 0 || amount < 1 || amount > 5000) {
         return res.json({ success: false, error: 'INVALID_AMOUNT' });
       }
       if (!tonWallet || tonWallet.length < 10) {
