@@ -355,7 +355,7 @@ app.post('/api/tg', async (req, res) => {
       return res.json({ success: true, data: { ton: user.ton, gpu: user.gpu, accumulatedTon: 0, accumulatedGpu: 0 } });
     }
 
-if (action === 'buy') {
+  if (action === 'buy') {
   console.log(`🟢🔵 [ПОКУПКА] =========== НАЧАЛО ===========`);
   console.log(`🟢 [ПОКУПКА] Пользователь: ${user_id}`);
   console.log(`🟢 [ПОКУПКА] Майнер: ${minerId}, количество: ${quantity || 1}`);
@@ -365,15 +365,7 @@ if (action === 'buy') {
     return res.status(400).json({ success: false, error: "INVALID_MINER_ID" });
   }
   
-  const price = MINER_PRICES[minerId];
   const limit = MINER_LIMITS[minerId];
-  
-  console.log(`🟢 [ПОКУПКА] Цена: TON=${price?.ton}, GPU=${price?.gpu}, лимит=${limit}`);
-  
-  if (!price) {
-    console.log(`🔴 [ПОКУПКА] ОШИБКА: майнер ${minerId} не найден в MINER_PRICES`);
-    return res.json({ success: false, error: "INVALID_MINER" });
-  }
   
   const user = await User.findOne({ userId: user_id });
   if (!user) {
@@ -396,37 +388,77 @@ if (action === 'buy') {
     return res.json({ success: false, error: "LIMIT_REACHED" });
   }
   
-  const totalTonPrice = price.ton * buyQuantity;
-  const totalGpuPrice = price.gpu * buyQuantity;
+  let totalPriceInGpu = 0;
+  let totalPriceInTon = 0;
   
-  console.log(`🟢 [ПОКУПКА] Стоимость: TON=${totalTonPrice}, GPU=${totalGpuPrice}`);
-  
-  if (totalTonPrice > 0 && user.ton < totalTonPrice) {
-    console.log(`🔴 [ПОКУПКА] НЕ ХВАТАЕТ TON: есть ${user.ton}, нужно ${totalTonPrice}`);
-    return res.json({ success: false, error: "INSUFFICIENT_TON" });
+  // ========== НОВАЯ ЛОГИКА ДЛЯ BASIC MINER ==========
+  if (minerId === 'basic') {
+    const baseGpuPrice = 40;
+    
+    // Рассчитываем цену за каждый майнер с учётом уже купленных
+    for (let i = 0; i < buyQuantity; i++) {
+      // Цена = базовая * (1.5 ^ количество_уже_купленных)
+      const priceForThisMiner = baseGpuPrice * Math.pow(1.5, currentQty + i);
+      totalPriceInGpu += priceForThisMiner;
+      console.log(`🟢 [BASIC MINER] Майнер #${currentQty + i + 1} стоит: ${priceForThisMiner} GPU`);
+    }
+    
+    console.log(`🟢 [BASIC MINER] Всего к оплате: ${totalPriceInGpu} GPU`);
+    
+    // Проверяем хватает ли GPU
+    if (user.gpu < totalPriceInGpu) {
+      console.log(`🔴 [BASIC MINER] НЕ ХВАТАЕТ GPU: есть ${user.gpu}, нужно ${totalPriceInGpu}`);
+      return res.json({ success: false, error: "INSUFFICIENT_GPU" });
+    }
+    
+    // Списываем средства
+    user.gpu -= totalPriceInGpu;
+    
+  // ========== СТАРАЯ ЛОГИКА ДЛЯ ВСЕХ ОСТАЛЬНЫХ МАЙНЕРОВ ==========
+  } else {
+    const price = MINER_PRICES[minerId];
+    if (!price) {
+      console.log(`🔴 [ПОКУПКА] ОШИБКА: майнер ${minerId} не найден в MINER_PRICES`);
+      return res.json({ success: false, error: "INVALID_MINER" });
+    }
+    
+    console.log(`🟢 [ПОКУПКА] Цена: TON=${price?.ton}, GPU=${price?.gpu}`);
+    
+    const totalTonPrice = (price.ton || 0) * buyQuantity;
+    const totalGpuPrice = (price.gpu || 0) * buyQuantity;
+    
+    console.log(`🟢 [ПОКУПКА] Стоимость: TON=${totalTonPrice}, GPU=${totalGpuPrice}`);
+    
+    if (totalTonPrice > 0 && user.ton < totalTonPrice) {
+      console.log(`🔴 [ПОКУПКА] НЕ ХВАТАЕТ TON: есть ${user.ton}, нужно ${totalTonPrice}`);
+      return res.json({ success: false, error: "INSUFFICIENT_TON" });
+    }
+    if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) {
+      console.log(`🔴 [ПОКУПКА] НЕ ХВАТАЕТ GPU: есть ${user.gpu}, нужно ${totalGpuPrice}`);
+      return res.json({ success: false, error: "INSUFFICIENT_GPU" });
+    }
+    
+    // Списываем средства
+    if (totalTonPrice > 0) user.ton -= totalTonPrice;
+    if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
+    
+    totalPriceInGpu = totalGpuPrice;
+    totalPriceInTon = totalTonPrice;
   }
-  if (totalGpuPrice > 0 && user.gpu < totalGpuPrice) {
-    console.log(`🔴 [ПОКУПКА] НЕ ХВАТАЕТ GPU: есть ${user.gpu}, нужно ${totalGpuPrice}`);
-    return res.json({ success: false, error: "INSUFFICIENT_GPU" });
-  }
   
-  // Списываем средства
-  if (totalTonPrice > 0) user.ton -= totalTonPrice;
-  if (totalGpuPrice > 0) user.gpu -= totalGpuPrice;
-  
-  // Добавляем майнер
+  // Добавляем майнер (общая логика для всех)
   user.minerQuantities = user.minerQuantities || {};
   user.minerQuantities[minerId] = (user.minerQuantities[minerId] || 0) + buyQuantity;
   user.markModified('minerQuantities');
   await user.save();
   
   console.log(`🟢 [ПОКУПКА] ПОСЛЕ покупки:`);
-  console.log(`   - TON: ${user.ton} (было ${user.ton + totalTonPrice}, списано ${totalTonPrice})`);
-  console.log(`   - GPU: ${user.gpu} (было ${user.gpu + totalGpuPrice}, списано ${totalGpuPrice})`);
+  console.log(`   - TON: ${user.ton}`);
+  console.log(`   - GPU: ${user.gpu}`);
   console.log(`   - Майнеры:`, JSON.stringify(user.minerQuantities));
   console.log(`🟢🔵 [ПОКУПКА] =========== УСПЕШНО ===========`);
   
-  // Проверяем, что сохранилось в БД (дополнительная проверка)
+  // Проверяем, что сохранилось в БД
   const checkUser = await User.findOne({ userId: user_id });
   console.log(`🟢 [ПОКУПКА] ПРОВЕРКА БД: майнеры=${JSON.stringify(checkUser.minerQuantities)}`);
   
@@ -434,7 +466,8 @@ if (action === 'buy') {
     success: true, 
     ton: user.ton, 
     gpu: user.gpu, 
-    minerQuantities: user.minerQuantities 
+    minerQuantities: user.minerQuantities,
+    pricePaid: { gpu: totalPriceInGpu, ton: totalPriceInTon }
   });
 }
 
