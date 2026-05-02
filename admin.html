@@ -326,8 +326,21 @@ async function giveMiner(userId) {
   const minerId = prompt('ID майнера (basic, normal, pro, ultra, legendary, minex, friend, bro, nexus):');
   if (!minerId) return;
   const quantity = parseInt(prompt('Количество:')) || 1;
-  await fetch(`${API_URL}/admin/api/user/giveMiner`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, minerId, quantity }) });
-  loadUsers();
+  
+  const response = await fetch(`${API_URL}/admin/api/user/giveMiner`, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' }, 
+    body: JSON.stringify({ userId, minerId, quantity }) 
+  });
+  
+  const result = await response.json();
+  
+  if (result.success) {
+    alert(`✅ ${result.message || 'Майнер выдан!'}`);
+    loadUsers(); // Обновляем список пользователей
+  } else {
+    alert(`❌ Ошибка: ${result.error || 'Неизвестная ошибка'}`);
+  }
 }
 async function banUser(userId) {
   const reason = prompt('Причина бана:');
