@@ -398,7 +398,7 @@ app.post('/api/tg', async (req, res) => {
     // Рассчитываем цену за каждый майнер с учётом уже купленных
     for (let i = 0; i < buyQuantity; i++) {
       // Цена = базовая * (1.5 ^ количество_уже_купленных)
-      const priceForThisMiner = baseGpuPrice * Math.pow(1.5, currentQty + i);
+      const priceForThisMiner = baseGpuPrice * Math.pow(1.2, currentQty + i);
       totalPriceInGpu += priceForThisMiner;
       console.log(`🟢 [BASIC MINER] Майнер #${currentQty + i + 1} стоит: ${priceForThisMiner} GPU`);
     }
