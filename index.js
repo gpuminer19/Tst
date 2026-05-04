@@ -155,7 +155,10 @@ const MINER_LIMITS = {
   pro: null,
   ultra: null,
   legendary: null,
-  minex: null
+  minex: null,
+  friend: 1,    // максимум 3 Friend Miner
+  bro: 1,       // максимум 2 Bro Miner
+  nexus: 1      // только 1 Nexus Miner
 };
 
 // ========== ВЕРИФИКАЦИЯ TELEGRAM INIT DATA ==========
