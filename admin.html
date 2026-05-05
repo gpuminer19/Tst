@@ -185,6 +185,12 @@
 const API_URL = window.location.origin;
 let currentBroadcastAbort = null;
 
+// ========== ПЕРЕМЕННЫЕ ДЛЯ ПАГИНАЦИИ ПОЛЬЗОВАТЕЛЕЙ ==========
+let allUsers = [];          // Хранит всех пользователей, полученных с сервера
+let currentUserPage = 1;   // Текущая страница
+let usersPerPage = 20;      // Количество пользователей на одной странице
+let currentUserSearchQuery = ''; // Текущий поисковый запрос
+
 async function adminLogin() {
   const username = document.getElementById('loginUsername').value;
   const password = document.getElementById('loginPassword').value;
@@ -251,11 +257,31 @@ async function loadBroadcastStats() {
   document.getElementById('broadcastBannedUsers').innerText = banned;
 }
 
-async function loadUsers() {
-  const res = await fetch(`${API_URL}/admin/api/users`);
-  const users = await res.json();
+// ========== ФУНКЦИИ ПАГИНАЦИИ ПОЛЬЗОВАТЕЛЕЙ ==========
+function filterUsersByQuery(users, query) {
+  if (!query) return users;
+  const lowerQuery = query.toLowerCase();
+  return users.filter(u => 
+    u.userId?.toLowerCase().includes(lowerQuery) || 
+    u.name?.toLowerCase().includes(lowerQuery)
+  );
+}
+
+function renderUserPage(filteredUsers) {
   const container = document.getElementById('usersList');
-  container.innerHTML = users.map(u => `
+  if (!container) return;
+
+  const startIndex = (currentUserPage - 1) * usersPerPage;
+  const endIndex = startIndex + usersPerPage;
+  const usersToShow = filteredUsers.slice(startIndex, endIndex);
+
+  if (usersToShow.length === 0 && filteredUsers.length > 0) {
+    currentUserPage = 1;
+    renderUserPage(filteredUsers);
+    return;
+  }
+
+  container.innerHTML = usersToShow.map(u => `
     <div class="user-card" data-id="${u.userId}" data-name="${u.name.toLowerCase()}">
       <div class="user-header">
         <span class="user-name">${escapeHtml(u.name)} ${u.isBanned ? '<span class="badge badge-banned">🚫 Забанен</span>' : ''}</span>
@@ -279,15 +305,125 @@ async function loadUsers() {
       </div>
     </div>
   `).join('');
+
+  if (filteredUsers.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">👀 Пользователи не найдены</div>';
+  }
+}
+
+function updateUserPaginationControls(totalFilteredUsers) {
+  const totalPages = Math.ceil(totalFilteredUsers / usersPerPage);
+  
+  let paginationContainer = document.getElementById('userPagination');
+  const parentContainer = document.getElementById('usersList')?.parentNode;
+  
+  if (!parentContainer) return;
+  
+  if (paginationContainer) {
+    paginationContainer.remove();
+  }
+  
+  if (totalPages <= 1) return;
+  
+  paginationContainer = document.createElement('div');
+  paginationContainer.id = 'userPagination';
+  paginationContainer.style.cssText = 'display: flex; justify-content: center; gap: 8px; margin-top: 20px; flex-wrap: wrap;';
+  
+  const prevBtn = document.createElement('button');
+  prevBtn.innerText = '◀ Назад';
+  prevBtn.className = 'btn';
+  prevBtn.disabled = currentUserPage === 1;
+  prevBtn.onclick = () => {
+    if (currentUserPage > 1) {
+      currentUserPage--;
+      const filtered = filterUsersByQuery(allUsers, currentUserSearchQuery);
+      renderUserPage(filtered);
+      updateUserPaginationControls(filtered.length);
+      document.getElementById('usersList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+  paginationContainer.appendChild(prevBtn);
+  
+  const maxButtons = 5;
+  let startPage = Math.max(1, currentUserPage - Math.floor(maxButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+  if (endPage - startPage + 1 < maxButtons) {
+    startPage = Math.max(1, endPage - maxButtons + 1);
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    const pageBtn = document.createElement('button');
+    pageBtn.innerText = i;
+    pageBtn.className = 'btn';
+    if (i === currentUserPage) {
+      pageBtn.style.background = '#00D4FF';
+      pageBtn.style.color = '#0B0E1A';
+      pageBtn.style.fontWeight = 'bold';
+    }
+    pageBtn.onclick = (function(page) { 
+      return function() { 
+        currentUserPage = page; 
+        const filtered = filterUsersByQuery(allUsers, currentUserSearchQuery);
+        renderUserPage(filtered);
+        updateUserPaginationControls(filtered.length);
+        document.getElementById('usersList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    })(i);
+    paginationContainer.appendChild(pageBtn);
+  }
+  
+  const nextBtn = document.createElement('button');
+  nextBtn.innerText = 'Вперед ▶';
+  nextBtn.className = 'btn';
+  nextBtn.disabled = currentUserPage === totalPages;
+  nextBtn.onclick = () => {
+    if (currentUserPage < totalPages) {
+      currentUserPage++;
+      const filtered = filterUsersByQuery(allUsers, currentUserSearchQuery);
+      renderUserPage(filtered);
+      updateUserPaginationControls(filtered.length);
+      document.getElementById('usersList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+  paginationContainer.appendChild(nextBtn);
+  
+  const infoSpan = document.createElement('div');
+  infoSpan.style.cssText = 'width: 100%; text-align: center; margin-top: 8px; font-size: 12px; color: #8EA3D4;';
+  infoSpan.innerText = `Показано ${((currentUserPage-1)*usersPerPage + 1)}-${Math.min(currentUserPage*usersPerPage, totalFilteredUsers)} из ${totalFilteredUsers} пользователей`;
+  paginationContainer.appendChild(infoSpan);
+  
+  parentContainer.appendChild(paginationContainer);
+}
+
+async function loadUsers() {
+  const container = document.getElementById('usersList');
+  if (!container) return;
+
+  container.innerHTML = '<div style="text-align:center; padding:20px; color:#8EA3D4;">⏳ Загрузка пользователей...</div>';
+
+  try {
+    const res = await fetch(`${API_URL}/admin/api/users`);
+    const users = await res.json();
+    allUsers = users;
+    
+    const filteredUsers = filterUsersByQuery(allUsers, currentUserSearchQuery);
+    renderUserPage(filteredUsers);
+    updateUserPaginationControls(filteredUsers.length);
+    
+  } catch (error) {
+    console.error('Ошибка загрузки пользователей:', error);
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#DC2626;">❌ Ошибка загрузки пользователей</div>';
+  }
 }
 
 function searchUsers() {
   const query = document.getElementById('searchUsers').value.toLowerCase();
-  document.querySelectorAll('.user-card').forEach(card => {
-    const id = card.dataset.id?.toLowerCase() || '';
-    const name = card.dataset.name?.toLowerCase() || '';
-    card.style.display = (id.includes(query) || name.includes(query)) ? 'block' : 'none';
-  });
+  currentUserSearchQuery = query;
+  currentUserPage = 1;
+  
+  const filtered = filterUsersByQuery(allUsers, currentUserSearchQuery);
+  renderUserPage(filtered);
+  updateUserPaginationControls(filtered.length);
 }
 
 function formatDate(d) { return new Date(d).toLocaleString(); }
@@ -337,7 +473,7 @@ async function giveMiner(userId) {
   
   if (result.success) {
     alert(`✅ ${result.message || 'Майнер выдан!'}`);
-    loadUsers(); // Обновляем список пользователей
+    loadUsers();
   } else {
     alert(`❌ Ошибка: ${result.error || 'Неизвестная ошибка'}`);
   }
@@ -548,14 +684,12 @@ async function startBroadcast() {
       progressStatus.innerText = '✅ Рассылка запущена!';
       progressStats.innerText = `📨 Отправлено: 0 / ${result.total}`;
       
-      // Имитация прогресса
       let progress = 0;
       const interval = setInterval(() => {
         progress = Math.min(progress + 5, 90);
         progressFill.style.width = `${progress}%`;
       }, 1000);
       
-      // Проверяем статус каждые 3 секунды
       const checkInterval = setInterval(async () => {
         const statusRes = await fetch(`${API_URL}/admin/api/broadcast/status`);
         const status = await statusRes.json();
