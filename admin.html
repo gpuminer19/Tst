@@ -20,7 +20,7 @@
   .tab-content { display: none; }
   .tab-content.active { display: block; }
   .search-box { width: 100%; background: #1A1F35; border: 1px solid #00D4FF; border-radius: 40px; padding: 12px 16px; color: #fff; margin-bottom: 16px; font-size: 14px; }
-  .user-card, .request-card, .task-card { background: #1A1F35; border-radius: 20px; padding: 14px; margin-bottom: 12px; }
+  .user-card, .request-card, .task-card, .top-card { background: #1A1F35; border-radius: 20px; padding: 14px; margin-bottom: 12px; }
   .user-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
   .user-name { font-weight: bold; font-size: 16px; }
   .user-id { font-size: 10px; color: #8EA3D4; font-family: monospace; }
@@ -31,16 +31,21 @@
   .btn-danger { background: #DC2626; }
   .btn-warning { background: #FF8C00; }
   .btn-info { background: #00D4FF; color: #0B0E1A; }
+  .btn-purple { background: #8B5CF6; }
   .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; z-index: 1000; }
-  .modal-content { background: #1A1F35; border-radius: 28px; padding: 24px; width: 90%; max-width: 400px; }
+  .modal-content { background: #1A1F35; border-radius: 28px; padding: 24px; width: 90%; max-width: 500px; }
   .modal-content input, .modal-content select, .modal-content textarea { width: 100%; background: #0B0E1A; border: 1px solid #00D4FF; border-radius: 16px; padding: 12px; margin: 8px 0; color: #fff; }
   .modal-content button { margin-top: 12px; width: 100%; }
   .badge { background: #00A86B; padding: 4px 10px; border-radius: 20px; font-size: 10px; }
   .badge-banned { background: #DC2626; }
+  .badge-gold { background: #F59E0B; color: #0B0E1A; }
+  .badge-silver { background: #9CA3AF; color: #0B0E1A; }
+  .badge-bronze { background: #CD853F; color: #0B0E1A; }
   .miners-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .miner-tag { background: #00D4FF20; padding: 4px 8px; border-radius: 20px; font-size: 11px; }
   .pending-count { background: #FF8C00; border-radius: 20px; padding: 2px 8px; font-size: 11px; margin-left: 8px; }
   .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #0B0E1A; padding: 10px; text-align: center; font-size: 10px; color: #5A6A8A; }
+  .referral-stats { font-size: 11px; color: #00FFAA; margin-top: 4px; }
   
   /* Стили для рассылки */
   .broadcast-stats { background: #0B0E1A; border-radius: 16px; padding: 12px; margin-bottom: 16px; }
@@ -55,6 +60,10 @@
   .broadcast-progress { background: #1A1F35; border-radius: 16px; padding: 16px; margin-top: 16px; display: none; }
   .progress-bar { width: 100%; height: 6px; background: #0B0E1A; border-radius: 10px; overflow: hidden; margin: 10px 0; }
   .progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00D4FF, #00FFAA); transition: width 0.3s; }
+  
+  .top-1 { border-left: 4px solid #F59E0B; }
+  .top-2 { border-left: 4px solid #9CA3AF; }
+  .top-3 { border-left: 4px solid #CD853F; }
 </style>
 </head>
 <body>
@@ -89,6 +98,7 @@
     <button class="tab-btn" onclick="showTab('tasks')">📋 Задания</button>
     <button class="tab-btn" onclick="showTab('pendingTasks')">⏳ Ждут проверки</button>
     <button class="tab-btn" onclick="showTab('broadcast')">📢 Рассылка</button>
+    <button class="tab-btn" onclick="showTab('referralTop')">🏆 ТОП рефералов</button>
   </div>
 
   <div id="tab-users" class="tab-content active">
@@ -144,7 +154,28 @@
     </div>
   </div>
 
+  <!-- Новая вкладка ТОП рефералов за 24 часа -->
+  <div id="tab-referralTop" class="tab-content">
+    <div style="background: #1A1F35; border-radius: 20px; padding: 20px; margin-bottom: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <h3>🏆 ТОП приглашений за 24 часа</h3>
+        <button class="btn btn-info" onclick="loadReferralTop()">🔄 Обновить</button>
+      </div>
+      <div id="referralTopList"></div>
+    </div>
+  </div>
+
   <div class="footer">CryptoGPU Admin Panel v2.0</div>
+</div>
+
+<!-- Модальное окно для просмотра рефералов пользователя -->
+<div id="referralModal" class="modal">
+  <div class="modal-content">
+    <h3>👥 Рефералы пользователя</h3>
+    <div id="referralModalInfo" style="margin: 10px 0; padding: 10px; background: #0B0E1A; border-radius: 16px;"></div>
+    <div id="referralModalList" style="max-height: 300px; overflow-y: auto;"></div>
+    <button class="btn btn-danger" onclick="closeReferralModal()">Закрыть</button>
+  </div>
 </div>
 
 <!-- Модальное окно для заданий -->
@@ -186,10 +217,140 @@ const API_URL = window.location.origin;
 let currentBroadcastAbort = null;
 
 // ========== ПЕРЕМЕННЫЕ ДЛЯ ПАГИНАЦИИ ПОЛЬЗОВАТЕЛЕЙ ==========
-let allUsers = [];          // Хранит всех пользователей, полученных с сервера
-let currentUserPage = 1;   // Текущая страница
-let usersPerPage = 20;      // Количество пользователей на одной странице
-let currentUserSearchQuery = ''; // Текущий поисковый запрос
+let allUsers = [];
+let currentUserPage = 1;
+let usersPerPage = 20;
+let currentUserSearchQuery = '';
+
+// ========== ФУНКЦИИ ДЛЯ РЕФЕРАЛОВ ==========
+async function loadReferralTop() {
+  const container = document.getElementById('referralTopList');
+  if (!container) return;
+  
+  container.innerHTML = '<div style="text-align:center; padding:20px; color:#8EA3D4;">⏳ Загрузка данных...</div>';
+  
+  try {
+    // Получаем всех пользователей
+    const users = await fetch(`${API_URL}/admin/api/users`).then(r => r.json());
+    
+    // Получаем реферальные связи за последние 24 часа
+    const referralsLast24h = await fetch(`${API_URL}/admin/api/referrals/last24h`).then(r => r.json());
+    
+    // Считаем количество приглашенных за 24 часа для каждого пользователя
+    const referralCounts = {};
+    referralsLast24h.forEach(ref => {
+      const referrerId = ref.referredBy;
+      if (referrerId) {
+        referralCounts[referrerId] = (referralCounts[referrerId] || 0) + 1;
+      }
+    });
+    
+    // Формируем массив с данными для ТОПа
+    const topUsers = users.map(user => ({
+      ...user,
+      referralsLast24h: referralCounts[user.userId] || 0
+    })).sort((a, b) => b.referralsLast24h - a.referralsLast24h).slice(0, 50); // ТОП 50
+    
+    if (topUsers.length === 0 || topUsers.every(u => u.referralsLast24h === 0)) {
+      container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">📊 За последние 24 часа нет новых приглашений</div>';
+      return;
+    }
+    
+    // Отрисовываем ТОП
+    container.innerHTML = topUsers.map((user, index) => {
+      let medalClass = '';
+      let medalIcon = '';
+      if (index === 0) { medalClass = 'top-1'; medalIcon = '🥇 '; }
+      else if (index === 1) { medalClass = 'top-2'; medalIcon = '🥈 '; }
+      else if (index === 2) { medalClass = 'top-3'; medalIcon = '🥉 '; }
+      
+      return `
+        <div class="top-card ${medalClass}" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px; font-weight: bold; width: 40px; color: ${index < 3 ? '#FFD700' : '#8EA3D4'}">${index + 1}</span>
+            <div>
+              <div><strong>${medalIcon}${escapeHtml(user.name)}</strong> <span class="user-id">${user.userId}</span></div>
+              <div class="referral-stats">👥 Всего рефералов: ${user.friends || 0}</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 24px; font-weight: bold; color: #00FFAA;">+${user.referralsLast24h}</div>
+            <div style="font-size: 11px; color: #8EA3D4;">за 24 часа</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+  } catch (error) {
+    console.error('Ошибка загрузки ТОПа рефералов:', error);
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#DC2626;">❌ Ошибка загрузки данных</div>';
+  }
+}
+
+async function showUserReferrals(userId, userName) {
+  const modal = document.getElementById('referralModal');
+  const infoDiv = document.getElementById('referralModalInfo');
+  const listDiv = document.getElementById('referralModalList');
+  
+  modal.style.display = 'flex';
+  infoDiv.innerHTML = `<strong>${escapeHtml(userName)}</strong> (${userId})<br>⏳ Загрузка списка рефералов...`;
+  listDiv.innerHTML = '';
+  
+  try {
+    // Получаем рефералов пользователя
+    const referrals = await fetch(`${API_URL}/admin/api/user/${userId}/referrals`).then(r => r.json());
+    
+    const totalReferrals = referrals.length;
+    const last24hReferrals = referrals.filter(ref => {
+      const refDate = new Date(ref.joinedAt || ref.createdAt);
+      const now = new Date();
+      const diffHours = (now - refDate) / (1000 * 60 * 60);
+      return diffHours <= 24;
+    });
+    
+    infoDiv.innerHTML = `
+      <strong>${escapeHtml(userName)}</strong> (${userId})<br>
+      📊 Всего рефералов: ${totalReferrals}<br>
+      📈 За 24 часа: ${last24hReferrals.length}
+    `;
+    
+    if (referrals.length === 0) {
+      listDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">Нет приглашенных пользователей</div>';
+    } else {
+      listDiv.innerHTML = `
+        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+          <thead>
+            <tr><th style="text-align: left; padding: 8px; border-bottom: 1px solid #00D4FF;">Имя</th>
+              <th style="text-align: left; padding: 8px; border-bottom: 1px solid #00D4FF;">ID</th>
+              <th style="text-align: left; padding: 8px; border-bottom: 1px solid #00D4FF;">Дата</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${referrals.map(ref => {
+              const date = new Date(ref.joinedAt || ref.createdAt);
+              const isLast24h = (new Date() - date) <= 24 * 60 * 60 * 1000;
+              return `
+                <tr style="${isLast24h ? 'background: #00FFAA10;' : ''}">
+                  <td style="padding: 8px;">${escapeHtml(ref.name || 'Unknown')}</td>
+                  <td style="padding: 8px; font-family: monospace;">${ref.userId || ref.id}</td>
+                  <td style="padding: 8px; font-size: 10px;">${formatDate(date)} ${isLast24h ? '<span style="color: #00FFAA;">🆕</span>' : ''}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки рефералов:', error);
+    infoDiv.innerHTML = `<strong>${escapeHtml(userName)}</strong> (${userId})<br><span style="color: #DC2626;">❌ Ошибка загрузки</span>`;
+    listDiv.innerHTML = '';
+  }
+}
+
+function closeReferralModal() {
+  document.getElementById('referralModal').style.display = 'none';
+}
 
 async function adminLogin() {
   const username = document.getElementById('loginUsername').value;
@@ -225,6 +386,7 @@ function showTab(tabName) {
   if (tabName === 'tasks') loadTasks();
   if (tabName === 'pendingTasks') loadPendingTasks();
   if (tabName === 'broadcast') loadBroadcastStats();
+  if (tabName === 'referralTop') loadReferralTop();
 }
 
 async function loadAll() {
@@ -234,6 +396,7 @@ async function loadAll() {
   loadTasks();
   loadPendingTasks();
   loadStats();
+  loadReferralTop();
 }
 
 async function loadStats() {
@@ -257,7 +420,6 @@ async function loadBroadcastStats() {
   document.getElementById('broadcastBannedUsers').innerText = banned;
 }
 
-// ========== ФУНКЦИИ ПАГИНАЦИИ ПОЛЬЗОВАТЕЛЕЙ ==========
 function filterUsersByQuery(users, query) {
   if (!query) return users;
   const lowerQuery = query.toLowerCase();
@@ -293,11 +455,13 @@ function renderUserPage(filteredUsers) {
         <span>👥 ${u.friends || 0} рефералов</span>
         <span>📅 ${formatDate(u.lastSeen || u.createdAt)}</span>
       </div>
+      <div class="referral-stats" id="ref24h-${u.userId}">⏳ Загрузка рефералов за 24ч...</div>
       <div class="miners-list">
         ${Object.entries(u.minerQuantities || {}).filter(([_,q]) => q > 0).map(([id,q]) => `<span class="miner-tag">${id} ×${q}</span>`).join('') || '<span class="miner-tag">нет майнеров</span>'}
       </div>
       <div class="button-group">
         <button class="btn btn-info" onclick="editUser('${u.userId}', ${u.ton || 0}, ${u.gpu || 0})">✏️ Редактировать</button>
+        <button class="btn btn-purple" onclick="showUserReferrals('${u.userId}', '${escapeHtml(u.name)}')">👥 Рефералы</button>
         <button class="btn btn-success" onclick="giveGpu('${u.userId}')">⚡ +GPU</button>
         <button class="btn btn-success" onclick="giveTon('${u.userId}')">💰 +TON</button>
         <button class="btn btn-warning" onclick="giveMiner('${u.userId}')">⛏️ +Майнер</button>
@@ -305,9 +469,32 @@ function renderUserPage(filteredUsers) {
       </div>
     </div>
   `).join('');
+  
+  // Загружаем данные о рефералах за 24 часа для каждого пользователя
+  loadReferralsForUsers(usersToShow);
+}
 
-  if (filteredUsers.length === 0) {
-    container.innerHTML = '<div style="text-align:center; padding:20px; color:#6B7CA8;">👀 Пользователи не найдены</div>';
+async function loadReferralsForUsers(users) {
+  try {
+    const referralsLast24h = await fetch(`${API_URL}/admin/api/referrals/last24h`).then(r => r.json());
+    
+    const referralCounts = {};
+    referralsLast24h.forEach(ref => {
+      const referrerId = ref.referredBy;
+      if (referrerId) {
+        referralCounts[referrerId] = (referralCounts[referrerId] || 0) + 1;
+      }
+    });
+    
+    users.forEach(user => {
+      const count = referralCounts[user.userId] || 0;
+      const elem = document.getElementById(`ref24h-${user.userId}`);
+      if (elem) {
+        elem.innerHTML = `📈 За 24 часа: +${count} рефералов`;
+      }
+    });
+  } catch (error) {
+    console.error('Ошибка загрузки рефералов за 24 часа:', error);
   }
 }
 
@@ -619,7 +806,7 @@ function insertLink() {
   const end = textarea.selectionEnd;
   const text = textarea.value;
   const selectedText = text.substring(start, end) || 'ссылка';
-  const replacement = `<a href="${url}">${selectedText}</a>`;
+  const replacement = `<a href="${url}" target="_blank">${selectedText}</a>`;
   textarea.value = text.substring(0, start) + replacement + text.substring(end);
   textarea.focus();
   previewMessage();
