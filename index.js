@@ -962,6 +962,77 @@ app.post('/admin/api/tasks/approve', async (req, res) => {
   res.json({ success: true });
 });
 
+
+// ========== НОВЫЕ ЭНДПОИНТЫ ДЛЯ РЕФЕРАЛОВ (24 ЧАСА) ==========
+
+// 1. Получить всех рефералов, приглашённых за последние 24 часа
+app.get('/admin/api/referrals/last24h', async (req, res) => {
+  if (!req.session.admin) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  
+  try {
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    // Находим всех пользователей, которые зарегистрировались за последние 24 часа
+    // и у которых есть referrerId (то есть они были кем-то приглашены)
+    const newUsers = await User.find({
+      createdAt: { $gte: twentyFourHoursAgo },
+      referrerId: { $ne: null, $exists: true }
+    }, 'userId name referrerId createdAt');
+    
+    // Формируем массив объектов с информацией о приглашениях
+    const referrals = newUsers.map(user => ({
+      userId: user.userId,        // ID приглашённого
+      userName: user.name,         // Имя приглашённого
+      referredBy: user.referrerId, // ID пригласившего
+      joinedAt: user.createdAt
+    }));
+    
+    res.json(referrals);
+  } catch (error) {
+    console.error('Error in /admin/api/referrals/last24h:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 2. Получить всех рефералов конкретного пользователя
+app.get('/admin/api/user/:userId/referrals', async (req, res) => {
+  if (!req.session.admin) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  
+  try {
+    const { userId } = req.params;
+    
+    // Находим пользователя, у которого запрашиваем рефералов
+    const user = await User.findOne({ userId });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    // Возвращаем invitedFriends (уже хранится в схеме пользователя)
+    const referrals = user.invitedFriends || [];
+    
+    // Дополнительно: обогащаем данными о дате регистрации (если есть)
+    const enrichedReferrals = await Promise.all(referrals.map(async (ref) => {
+      const invitedUser = await User.findOne({ userId: ref.friendId });
+      return {
+        userId: ref.friendId,
+        name: ref.friendName,
+        joinedAt: invitedUser?.createdAt || ref.date,
+        earnedGpu: ref.earnedGpu || 0
+      };
+    }));
+    
+    res.json(enrichedReferrals);
+  } catch (error) {
+    console.error('Error in /admin/api/user/:userId/referrals:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ========== РАССЫЛКА В АДМИН-ПАНЕЛИ ==========
 
 // Состояние рассылки (для отслеживания прогресса)
